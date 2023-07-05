@@ -52,7 +52,5 @@ for i, name in enumerate(output_names):
     output_data = output_tensor.copy_to_cpu()
     results.append(output_data)
 
-breakpoint()
-
 print(results)
 print(paddle.add(paddle.matmul(paddle.to_tensor(input_data), paddle.to_tensor(weight_data)), paddle.to_tensor(bias_data)))
