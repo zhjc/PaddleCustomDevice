@@ -7,12 +7,12 @@ import paddle
 
 @paddle.incubate.passes.ir.RegisterPass
 def generate_ffn():
-    def pattern(x, y, z):
+    def pattern(x, y):
         geluNode = paddle.incubate.passes.ir.PassDesc.OP.gelu(X=x)
         matmulNode = paddle.incubate.passes.ir.PassDesc.OP.matmul_v2(X=geluNode, Y=y)
         return matmulNode
 
-    def replace(x, y, z):
+    def replace(x, y):
         FfnNode = paddle.incubate.passes.ir.PassDesc.OP.Ffn_pass_test(X=x, Y=y)
         return FfnNode
 
