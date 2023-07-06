@@ -7,13 +7,13 @@ import paddle
 
 @paddle.incubate.passes.ir.RegisterPass
 def generate_split():
-    def pattern(x, y, z):
+    def pattern(x):
         splitNode = paddle.incubate.passes.ir.PassDesc.OP.split(X=x)
         splitNode.SetAttr("num", 3)
-        return matmulNode
+        return splitNode
 
-    def replace(x, y, z):
-        newSplitNode = paddle.incubate.passes.ir.PassDesc.OP.split_pass_test(X=x, Y=y)
+    def replace(x):
+        newSplitNode = paddle.incubate.passes.ir.PassDesc.OP.split_pass_test(X=x)
         newSplitNode.SetAttr("num", 3)
         return newSplitNode
 
