@@ -7,6 +7,8 @@ import paddle
 
 from .split_pass import generate_split
 from .ffn_pass import generate_ffn
+from .add_norm_pass import generate_add_norm
+from .matmul_pass import generate_matmul
 
 paddle.enable_static()
 
@@ -20,3 +22,5 @@ def setUp():
 def addPasses(pass_builder):
     pass_builder.append_pass("generate_split")
     pass_builder.append_pass("generate_ffn")
+    pass_builder.append_pass("generate_add_norm")
+    pass_builder.append_pass("generate_matmul")
