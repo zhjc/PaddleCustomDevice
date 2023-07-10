@@ -24,7 +24,7 @@ def gen_fuse_multi_head_attention():
     def pattern(q, concated_k, concated_v, attn_mask):
         transed_q = transpose_without_shape(q)
         transed_k = transpose_without_shape(concated_k)
-        transed_v = transpose_without_shape(v)
+        transed_v = transpose_without_shape(concated_v)
 
         scaled_q = ir.PassDesc.OP.scale(X=transed_q)
 
