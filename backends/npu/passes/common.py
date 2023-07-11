@@ -10,6 +10,7 @@ from .ffn_pass import generate_ffn
 from .add_norm_pass import generate_add_norm
 from .matmul_pass import generate_matmul
 from .attention_pass import gen_fuse_multi_head_attention
+from .linear_pass import generate_linear
 
 paddle.enable_static()
 
@@ -26,3 +27,4 @@ def addPasses(pass_builder):
     pass_builder.append_pass("generate_ffn")
     pass_builder.append_pass("generate_add_norm")
     pass_builder.append_pass("generate_matmul")
+    pass_builder.append_pass("generate_linear")
