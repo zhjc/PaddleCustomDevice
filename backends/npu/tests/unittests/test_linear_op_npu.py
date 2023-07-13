@@ -13,7 +13,7 @@ def generate_linear():
 
     return pattern, replace
 
-@paddle.jit.to_static(input_spec=[paddle.static.InputSpec([2, 3, 6], 'float32', 'input'),  paddle.static.InputSpec([6, 18], 'float32', 'weight'),  paddle.static.InputSpec([18], 'float32', 'bias')])
+@paddle.jit.to_static(input_spec=[paddle.static.InputSpec([3, 9, 64], 'float32', 'input'),  paddle.static.InputSpec([64, 16], 'float32', 'weight'),  paddle.static.InputSpec([16], 'float32', 'bias')])
 def func(x, y, z):
     return paddle.add(paddle.matmul(x, y), z)
 
@@ -33,13 +33,13 @@ predictor = paddle.inference.create_predictor(config)
 input_names = predictor.get_input_names()
 print(f"input_names={input_names}")
 input_tensor = predictor.get_input_handle('input')
-input_data = np.random.randn(2, 3, 6).astype('float32')
+input_data = np.ones((3, 9, 64)).astype('float32')
 input_tensor.copy_from_cpu(input_data)
 weight_tensor = predictor.get_input_handle('weight')
-weight_data = np.random.randn(6, 18).astype('float32')
+weight_data = np.ones((64, 16)).astype('float32')
 weight_tensor.copy_from_cpu(weight_data)
 bias_tensor = predictor.get_input_handle('bias')
-bias_data = np.random.randn(18).astype('float32')
+bias_data = np.ones((16)).astype('float32')
 bias_tensor.copy_from_cpu(bias_data)
 
 predictor.run()
