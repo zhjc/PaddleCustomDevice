@@ -9,6 +9,7 @@ from .split_pass import generate_split
 from .ffn_pass import generate_ffn
 from .add_norm_pass import generate_add_norm
 from .matmul_pass import generate_matmul
+from .pad2d_pass import generate_pad2d
 
 paddle.enable_static()
 
@@ -24,3 +25,4 @@ def addPasses(pass_builder):
     pass_builder.append_pass("generate_ffn")
     pass_builder.append_pass("generate_add_norm")
     pass_builder.append_pass("generate_matmul")
+    pass_builder.append_pass("generate_pad2d")
