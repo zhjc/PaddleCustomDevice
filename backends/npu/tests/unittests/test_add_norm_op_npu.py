@@ -11,7 +11,12 @@ def generate_add_norm():
         return layer_norm_res.Output("Y")
 
     def replace(x, y, weight, bias):
-        return paddle.incubate.passes.ir.PassDesc.OP.add_norm(X=x, Y=y, Weight=weight, Bias=bias)
+        add_norm = paddle.incubate.passes.ir.PassDesc.OP.add_norm(X=x, Y=y, Weight=weight, Bias=bias)
+        add_norm.SetAttr("epsilon", 0.0)
+        add_norm.SetAttr("begin_norm_axis", 0)
+        add_norm.Attr("epsilon").MappedPattern(op="layer_norm", name="epsilon")
+        add_norm.Attr("begin_norm_axis").MappedPattern(op="layer_norm", name="begin_norm_axis")
+        return add_norm
 
     return pattern, replace
 
@@ -58,6 +63,4 @@ for i, name in enumerate(output_names):
     results.append(output_data)
 
 print(results)
-print(paddle.nn.functional.layer_norm(paddle.add(paddle.to_tensor(x_data), paddle.to_tensor(y_data)), x_data.shape[-1], weight=paddle.to_tensor(weight_data), bias=paddle.to_tensor(bias_data)))
-print(paddle.add(paddle.to_tensor(x_data), paddle.to_tensor(y_data)))
-
+print([paddle.nn.functional.layer_norm(paddle.add(paddle.to_tensor(x_data), paddle.to_tensor(y_data)), x_data.shape[-1], weight=paddle.to_tensor(weight_data), bias=paddle.to_tensor(bias_data)).numpy()])

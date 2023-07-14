@@ -15,6 +15,7 @@
 #include <iostream>
 #include <vector>
 
+#include "kernels/funcs/npu_funcs.h"
 #include "kernels/funcs/npu_op_runner.h"
 #include "paddle/extension.h"
 
@@ -30,7 +31,9 @@ std::vector<paddle::Tensor> AddNormOp(
     const paddle::Tensor& x,
     const paddle::Tensor& y,
     const paddle::Tensor& weight,
-    const paddle::Tensor& bias) {
+    const paddle::Tensor& bias,
+	int begin_norm_axis = 1,
+	float epsilon = 1e-5) {
   // 1. preprocessing: stream, input tensors;
   auto dev_ctx = static_cast<const phi::CustomContext*>(
       paddle::experimental::DeviceContextPool::Instance().Get(x.place()));
@@ -62,20 +65,24 @@ std::vector<paddle::Tensor> AddNormOp(
   // 4. out_tensor->paddle::Tensor.
   return {paddle::Tensor(out_tensor)};
   */
+  
   const auto& runner =
       NpuOpRunner("Add", {*x_tensor, *y_tensor}, {*out_tensor}, {});
   runner.Run(stream);
-  // auto add_res_tensor = std::make_shared<phi::DenseTensor>();
-  // add_res_tensor->ShareDataWith(out_tensor);
-  //paddle::Tensor add_res(out_tensor);
-  //paddle::Tensor output = paddle::nn:functional::layer_norm(add_res, 0, weight=weight, bias=bias);
-
-  return {paddle::Tensor(out_tensor)};
+  
+  paddle::Tensor add_res(out_tensor);
+  
+  // PADDLE_API Tensor layer_norm(const Tensor& x, const paddle::optional<Tensor>& scale, const paddle::optional<Tensor>& bias, float epsilon = 1e-5, int begin_norm_axis = 1);
+  paddle::Tensor output = paddle::experimental::layer_norm(add_res, weight, bias, epsilon, begin_norm_axis);
+  
+  return {output};
 }
 
 PD_BUILD_OP(add_norm)
     .Inputs({"X", "Y", "Weight", "Bias"})
     .Outputs({"Out"})
+	.Attrs({"begin_norm_axis: int",
+            "epsilon: float"})
     .SetKernelFn(PD_KERNEL(AddNormOp))
     .SetInferShapeFn(PD_INFER_SHAPE(
         AddNormOpInferShape));  // neccessary if the op has muti_inputs

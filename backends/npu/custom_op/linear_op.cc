@@ -52,23 +52,48 @@ std::vector<paddle::Tensor> LinearOp(
   x_temp.Resize(phi::make_ddim(vec_dim));
 
   // out
+  std::vector<int64_t> temp_dims = {x_temp.numel() / K, y_dims[y_ndim - 1]};
+  
+  std::shared_ptr<phi::DenseTensor> matmul_res =
+      std::make_shared<phi::DenseTensor>();
+  matmul_res->Resize(phi::make_ddim(temp_dims));
+  dev_ctx->Alloc(matmul_res.get(), x->dtype());
+
   std::shared_ptr<phi::DenseTensor> out =
       std::make_shared<phi::DenseTensor>();
-  std::vector<int64_t> out_temp_dims = {x_temp.numel() / K, y_dims[y_ndim - 1]};
-  out->Resize(phi::make_ddim(out_temp_dims));
+  out->Resize(phi::make_ddim(temp_dims));
   dev_ctx->Alloc(out.get(), x->dtype());
   
   // attr
+  const bool transpose_x1 = false;
+  const bool transpose_x2 = false;
+  NPUAttributeMap attrs = {{"transpose_x1", transpose_x1}, {"transpose_x2", transpose_x2}}; // for MatMul
+  
   const int64_t need_trans = 0;
   const int64_t with_bias = 1;
   const int64_t operate = 0;
-  NPUAttributeMap attrs = {{"needTrans", need_trans}, {"withBias", with_bias}, {"operateType", operate}};
- 
+  // NPUAttributeMap attrs = {{"needTrans", need_trans}, {"withBias", with_bias}, {"operateType", operate}}; // for MatmulAll
+  
   // run
+  // run 1: use MatmulAll
   const auto& runner =
       NpuOpRunner("MatmulAll", {x_temp, *y, *b, *b}, {*out}, attrs);
-  runner.Run(stream);
+  //runner.Run(stream);
   
+  // run 2: use MatMul and Add.
+  const auto& runner1 =
+      NpuOpRunner("MatMul", {x_temp, *y}, {*matmul_res}, attrs);
+  //runner1.Run(stream);
+  
+  const auto& runner2 =
+      NpuOpRunner("Add", {*matmul_res, *b}, {*out});
+  //runner2.Run(stream);
+  
+  // run 3: use MatMul
+  const auto& runner3 =
+      NpuOpRunner("MatMul", {x_temp, *y, *b}, {*out}, attrs);
+  runner3.Run(stream);
+
   // post
   auto out_dims = LinearOpInferShape(
       input.shape(), weight.shape(), bias.shape()).at(0);
@@ -76,6 +101,7 @@ std::vector<paddle::Tensor> LinearOp(
   auto out_tensor = paddle::Tensor(out);
 
   return {out_tensor};
+  // return {paddle::paddle::add(paddle::matmul(input, weight), bias)};
 }
 
 PD_BUILD_OP(linear)
