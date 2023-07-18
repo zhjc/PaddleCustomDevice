@@ -52,7 +52,7 @@ std::vector<paddle::Tensor> FlashAttentionOp(const paddle::Tensor& query,
   dev_ctx->Alloc(out_tensor.get(), query_tensor->dtype());
 
   const auto& runner =
-      NpuOpRunner("FlashAttentionV2", {*query_tensor, *cache_key_tensor, *cache_value_tensor, 
+      NpuOpRunner("FlashAttentionDecoder", {*query_tensor, *cache_key_tensor, *cache_value_tensor, 
       *batch_tensor, *q_seqlen_tensor, *kv_seqlen_tensor, *attention_mask_tensor}, {*out_tensor}, {});
   runner.Run(stream);    
   

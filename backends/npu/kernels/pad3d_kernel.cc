@@ -28,19 +28,19 @@ void Pad3dKernel(const Context& dev_ctx,
   auto in_dims = x.dims();
   auto pads = paddings_array.GetData();
 
-  PADDLE_ENFORCE_LT(abs(pad_value),
-                    1e-5,
-                    phi::errors::Unimplemented(
-                        "npu npu only support constant_values=0 right now,"
-                        "but received constant_value is %f .",
-                        pad_value));
+  // PADDLE_ENFORCE_LT(abs(pad_value),
+  //                   1e-5,
+  //                   phi::errors::Unimplemented(
+  //                       "npu npu only support constant_values=0 right now,"
+  //                       "but received constant_value is %f .",
+  //                       pad_value));
 
-  PADDLE_ENFORCE_EQ(
-      mode,
-      "constant",
-      phi::errors::Unimplemented("npu npu only support mode=constant right now,"
-                                 "but received mode is %s .",
-                                 mode));
+  // PADDLE_ENFORCE_EQ(
+  //     mode,
+  //     "constant",
+  //     phi::errors::Unimplemented("npu npu only support mode=constant right now,"
+  //                                "but received mode is %s .",
+  //                                mode));
 
   std::vector<int> paddings(
       {0, 0, 0, 0, pads[4], pads[5], pads[2], pads[3], pads[0], pads[1]});
@@ -62,13 +62,26 @@ void Pad3dKernel(const Context& dev_ctx,
   dev_ctx.template Alloc<T>(out);
 
   NpuOpRunner runner;
-  runner.SetType("PadV3")
-      .AddInput(x)
-      .AddInput(dev_ctx, std::move(paddings))
-      .AddInput(dev_ctx,
-                std::vector<int>({0}))  // npu only support constant_value=0 now
-      .AddOutput(*out)
-      .AddAttr("mode", mode);
+  if (mode == "replicate") {
+    const std::string edge = "edge";
+    runner.SetType("PadV3")
+        .AddInput(x)
+        .AddInput(dev_ctx, std::move(paddings))
+        .AddInput(dev_ctx,
+                  std::vector<int>({(int) pad_value}))  // npu only support constant_value=0 now
+        .AddOutput(*out)
+        .AddAttr("mode", edge);
+  }
+  else {
+    runner.SetType("PadV3")
+        .AddInput(x)
+        .AddInput(dev_ctx, std::move(paddings))
+        .AddInput(dev_ctx,
+                  std::vector<int>({(int) pad_value}))  // npu only support constant_value=0 now
+        .AddOutput(*out)
+        .AddAttr("mode", mode);
+  }
+  
 
   auto stream = dev_ctx.stream();
   runner.Run(stream);
