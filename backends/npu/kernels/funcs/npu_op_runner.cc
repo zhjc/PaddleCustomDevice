@@ -597,6 +597,12 @@ void NpuOpRunner::Run(aclrtStream stream, bool sync) const {
   aclError ret;
   // Ensure that the Gil has been released before running
   // aclopCompileAndExecute.
+  if (op_type_ == "FlashAttentionDecoder") {
+    aclopSetCompileFlag(ACL_OP_COMPILE_FUZZ);
+  }
+  else {
+    aclopSetCompileFlag(ACL_OP_COMPILE_DEFAULT);
+  }
   PY_GIL_RELEASE({
     ret = aclopCompileAndExecute(op_type_.c_str(),
                                  input_descs_.size(),
