@@ -9,6 +9,6 @@ def generate_linear():
         return paddle.incubate.passes.ir.PassDesc.OP.elementwise_add(X=matmul, Y=bias)
 
     def replace(x, weight, bias):
-        return paddle.incubate.passes.ir.PassDesc.OP.linear(Input=x, Weight=w, Bias=bias)
+        return paddle.incubate.passes.ir.PassDesc.OP.linear(Input=x, Weight=weight, Bias=bias)
 
     return pattern, replace

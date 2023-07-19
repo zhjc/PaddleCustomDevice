@@ -1094,12 +1094,12 @@ PD_REGISTER_PLUGIN_KERNEL(swish,
                           float,
                           phi::dtype::float16) {}
 
-PD_REGISTER_PLUGIN_KERNEL(swish_raw,
-                          npu,
-                          ALL_LAYOUT,
-                          custom_kernel::SwishRawKernel,
-                          float,
-                          phi::dtype::float16) {}
+// PD_REGISTER_PLUGIN_KERNEL(swish_raw,
+//                           npu,
+//                           ALL_LAYOUT,
+//                           custom_kernel::SwishRawKernel,
+//                           float,
+//                           phi::dtype::float16) {}
 
 PD_REGISTER_PLUGIN_KERNEL(swish_grad,
                           npu,
