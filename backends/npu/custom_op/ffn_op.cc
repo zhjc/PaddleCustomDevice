@@ -17,6 +17,10 @@
 
 #include "kernels/funcs/npu_op_runner.h"
 #include "paddle/extension.h"
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+#include "kernels/funcs/format_utils.h"
+#include "acltransformer/params/ffn.h"
+#endif
 
 std::vector<std::vector<int64_t>> FFNOpInferShape(
     const std::vector<int64_t>& input_shape,
@@ -39,7 +43,29 @@ std::vector<paddle::Tensor> FFNOp(
   auto x = static_cast<const phi::DenseTensor*>(input.impl().get());
   auto y = static_cast<const phi::DenseTensor*>(weight.impl().get());
   auto b = static_cast<const phi::DenseTensor*>(bias.impl().get());
-  
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+  std::shared_ptr<phi::DenseTensor> out_tensor =
+      std::make_shared<phi::DenseTensor>();
+  auto out_shape = FFNOpInferShape(
+      input.shape(), weight.shape(), bias.shape()).at(0);
+  out_tensor->Resize(phi::make_ddim(out_shape));
+  dev_ctx->Alloc(out_tensor.get(), x->dtype());
+
+  auto x_asd = ConvertDenseTensorToAsdTensor(*x);
+  auto y_asd = ConvertDenseTensorToAsdTensor(*y);
+  auto b_asd = ConvertDenseTensorToAsdTensor(*b);
+  auto out_tensor_asd = ConvertDenseTensorToAsdTensor(*out_tensor);
+
+  AclTransformer::FfnParam opParam = {false, true}; /* 加速库默认会转置W */
+  AclTransformer::OperationCall opCall("FfnOperation", opParam);
+  AsdOps::SVector<AsdOps::Tensor> inTensors = {
+    x_asd, y_asd, b_asd};
+  AsdOps::SVector<AsdOps::Tensor> outTensors = {out_tensor_asd};
+
+  int ret = opCall.ExecuteSync(inTensors, outTensors, stream);
+  VLOG(6) << "FFNOp run in transformer acceleration ret:" << ret;
+  return {paddle::Tensor(out_tensor)};
+#else
   std::vector<int64_t> x_dims = phi::vectorize(x->dims());
   std::vector<int64_t> y_dims = phi::vectorize(y->dims());
   int x_ndim = x_dims.size();
@@ -96,7 +122,7 @@ std::vector<paddle::Tensor> FFNOp(
 
   std::cout<<"ffn1"<<std::endl;
   return {out_tensor};
-  // return {paddle::gpaddle::add(paddle::matmul(input, weight), bias)};
+#endif
 }
 
 PD_BUILD_OP(ffn)

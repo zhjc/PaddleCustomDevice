@@ -79,6 +79,47 @@ aclFormat ConvertToNpuFormat(phi::DataLayout layout) {
   return iter->second;
 }
 
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+AsdOps::Tensor ConvertDenseTensorToAsdTensor(const phi::DenseTensor &tensor)
+{
+  static std::map<phi::DataType, AsdOps::TensorDType> dtypeMap = {
+    {phi::DataType::BOOL,    AsdOps::TENSOR_DTYPE_BOOL},  {phi::DataType::UINT8,   AsdOps::TENSOR_DTYPE_UINT8},
+    {phi::DataType::BOOL,    AsdOps::TENSOR_DTYPE_INT8},  {phi::DataType::FLOAT16, AsdOps::TENSOR_DTYPE_FLOAT16},
+    {phi::DataType::FLOAT32, AsdOps::TENSOR_DTYPE_FLOAT}, {phi::DataType::INT32,   AsdOps::TENSOR_DTYPE_INT32},
+    {phi::DataType::INT64,   AsdOps::TENSOR_DTYPE_INT64},
+  };
+
+  AsdOps::Tensor asdTensor;
+  asdTensor.desc.format = static_cast<AsdOps::TensorFormat>(ConvertToNpuFormat(tensor.layout()));
+  if (asdTensor.desc.format == AsdOps::TENSOR_FORMAT_NCHW) { /* TODO:NCHW需要转为ND */
+    asdTensor.desc.format = AsdOps::TENSOR_FORMAT_ND;
+  }
+  asdTensor.data = const_cast<void *>(tensor.data());
+
+  auto origin_dims = phi::vectorize(tensor.dims());
+  VLOG(6) << "Convert Asd Tensor dims size: " << origin_dims.size() << " Format" << asdTensor.desc.format;
+  asdTensor.desc.dims.resize(origin_dims.size());
+  for (uint64_t i = 0; i < origin_dims.size(); i++) {
+    asdTensor.desc.dims[i] = origin_dims[i];
+    VLOG(6) << "Convert Asd Tensor dims i: " << i << " dim: " << origin_dims[i];
+  }
+
+  auto it = dtypeMap.find(tensor.dtype());
+  if (it != dtypeMap.end()) {
+    asdTensor.desc.dtype = it->second;
+  } else {
+    PADDLE_ENFORCE_NE(
+      it,
+      dtypeMap.end(),
+      phi::errors::NotFound(
+          "The data type (%s) can not convert to Asd data type.", tensor.dtype()));
+  }
+
+  asdTensor.dataSize = AclTransformer::TensorUtil::CalcTensorDataSize(asdTensor);
+  return asdTensor;
+}
+#endif
+
 namespace {
 
 constexpr int BLOCKSIZE = 16;
