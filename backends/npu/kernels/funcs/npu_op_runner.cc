@@ -39,6 +39,7 @@
 
 static aclDataBuffer *float_status_buffer_ = NULL;
 static aclTensorDesc *float_status_desc_ = NULL;
+static bool isAclEnableJit = false;
 
 FLAGS_DEFINE_bool(npu_check_nan_inf, false, "check nan/inf of all npu kernels");
 FLAGS_DEFINE_bool(npu_blocking_run, false, "enable sync for all npu kernels");
@@ -602,6 +603,11 @@ void NpuOpRunner::Run(aclrtStream stream, bool sync) const {
   }
   else {
     aclopSetCompileFlag(ACL_OP_COMPILE_DEFAULT);
+  }
+  /* 规避因910B默认关闭jit_compile导致算子问题，在这里先强制开启，TODO:后续优化开关方式 */
+  if (!isAclEnableJit) {
+    aclSetCompileopt(ACL_OP_JIT_COMPILE, "enable");
+    std::cout << "ACL_OP_JIT_COMPILE:enable" << std::endl;
   }
   PY_GIL_RELEASE({
     ret = aclopCompileAndExecute(op_type_.c_str(),
