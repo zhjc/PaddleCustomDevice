@@ -7,11 +7,10 @@ import paddle
 
 @paddle.incubate.passes.ir.RegisterPass
 def generate_ffn():
-    def pattern(x, y):
-        return paddle.nn.functional.gelu(paddle.add(paddle.matmul(x, y), z))
+    def pattern(x, y, bias):
+        return paddle.nn.functional.gelu(paddle.add(paddle.matmul(x, y), bias))
 
-    def replace(x, y):
-        FfnNode = paddle.incubate.passes.ir.PassDesc.OP.ffn(X=x, Y=y)
-        return FfnNode
+    def replace(x, y, bias):
+        return paddle.incubate.passes.ir.PassDesc.OP.ffn(Input=x, Weight=y, Bias=bias)
 
     return pattern, replace

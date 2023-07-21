@@ -15,6 +15,8 @@ option(WITH_MKLDNN "compile with MKLDNN support" ON)
 option(WITH_KERNELS "compile with custom kernels" ON)
 option(WITH_TESTING "compile with unit testing" OFF)
 option(WITH_ARM "compile with arm support" OFF)
+option(WITH_ASCEND_TRANSFORMER_ACC "compile with ascend transformer acceleration" OFF)
+option(ON_INFER "compile with inference c++ lib" OFF)
 option(ON_INFER "compile with inference c++ lib" OFF)
 
 message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}, version: "
@@ -50,6 +52,11 @@ if(WITH_KERNELS)
   list(APPEND CUSTOM_NPU_SRCS ${CUSTOM_CUSTOM_OP_SRCS})
 endif()
 
+# ASCEND TRANSFORMER ACCELERATION
+if(WITH_ASCEND_TRANSFORMER_ACC)
+  add_definitions(-DPADDLE_WITH_ASCEND_TRANSFORMER_ACC)
+endif()
+
 # C++ infer lib need to compatiable with CXX11
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
 if(ON_INFER)
@@ -62,6 +69,11 @@ add_dependencies(${CUSTOM_NPU_NAME} ascend_cl)
 target_link_libraries(${CUSTOM_NPU_NAME} PRIVATE ${ascendcl_lib}
                                                  ${ascend_hccl_lib} glog gflags)
 target_link_libraries(${CUSTOM_NPU_NAME} PRIVATE ${acl_op_compiler_lib})
+
+if(WITH_ASCEND_TRANSFORMER_ACC)
+  target_link_libraries(${CUSTOM_NPU_NAME} PRIVATE $ENV{ACLTRANSFORMER_HOME_PATH}/lib/libacltransformer.so)
+  include_directories($ENV{ACLTRANSFORMER_HOME_PATH}/include)
+endif()
 
 # link paddle shared library
 include(third_party)
