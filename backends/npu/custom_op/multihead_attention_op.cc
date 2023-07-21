@@ -38,7 +38,7 @@ std::vector<paddle::Tensor> MultiheadAttentionOp(const paddle::Tensor& query,
                                             const paddle::Tensor& concated_k,
                                             const paddle::Tensor& concated_v,
                                             const paddle::Tensor& attn_mask,
-                                            int layer_num = 1) {
+                                            float layer_num = 1.0) {
   auto dev_ctx = static_cast<const phi::CustomContext*>(
       paddle::experimental::DeviceContextPool::Instance().Get(query.place()));
   auto stream = static_cast<aclrtStream>(dev_ctx->stream());
@@ -71,7 +71,7 @@ std::vector<paddle::Tensor> MultiheadAttentionOp(const paddle::Tensor& query,
   auto out_tensor_asd = ConvertDenseTensorToAsdTensor(*out_tensor);
 
   AclTransformer::SelfAttentionKvCacheGPT3Param opParam = {false,
-      head_dim, head_num, layer_num};
+      head_dim, head_num, (int64_t)layer_num};
   AclTransformer::OperationCall opCall("SelfAttentionKvCacheGPT3Operation",
       opParam);
   AsdOps::SVector<AsdOps::Tensor> inTensors = {query_tensor_asd,
@@ -86,10 +86,10 @@ std::vector<paddle::Tensor> MultiheadAttentionOp(const paddle::Tensor& query,
 #endif
 }
 
-PD_BUILD_OP(multihead_attention_op)
+PD_BUILD_OP(multihead_attention)
   .Inputs({"Q", "ConcatedK", "ConcatedV", "AttnMask"})
   .Outputs({"Out"})
-  .Attrs({"layer_num: int"})
+  .Attrs({"layer_num: float"})
   .SetKernelFn(PD_KERNEL(MultiheadAttentionOp))
   .SetInferShapeFn(PD_INFER_SHAPE(
     MultiheadAttentionOpInferShape
