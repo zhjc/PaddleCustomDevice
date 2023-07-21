@@ -608,6 +608,7 @@ void NpuOpRunner::Run(aclrtStream stream, bool sync) const {
   if (!isAclEnableJit) {
     aclSetCompileopt(ACL_OP_JIT_COMPILE, "enable");
     std::cout << "ACL_OP_JIT_COMPILE:enable" << std::endl;
+    isAclEnableJit = true;
   }
   PY_GIL_RELEASE({
     ret = aclopCompileAndExecute(op_type_.c_str(),

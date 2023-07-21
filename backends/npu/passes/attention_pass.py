@@ -121,9 +121,9 @@ def gen_gpt3_multi_head_attention():
     
     def replace(q, concated_k, concated_v, attn_mask):
         attention_node = ir.PassDesc.OP.multihead_attention(Q=q, ConcatedK=concated_k, ConcatedV=concated_v, AttnMask=attn_mask)
-        attention_node.SetAttr("layer_num")
-        attention_node.Attr("layer_num").MappedPattern(op="scale", name="scale", layer_num = 1)
-        return 
+        attention_node.SetAttr("layer_num", 1.0)
+        attention_node.Attr("layer_num").MappedPattern(op="scale", name="scale", index=1)
+        return attention_node
 
     return pattern, replace
 
