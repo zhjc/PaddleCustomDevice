@@ -8,6 +8,7 @@ import paddle
 from .split_pass import generate_split
 from .ffn_pass import generate_ffn
 from .add_norm_pass import generate_add_norm
+from .layer_norm_pass import generate_layer_norm
 from .matmul_pass import generate_matmul
 from .attention_pass import gen_fuse_multi_head_attention, gen_gpt3_multi_head_attention
 from .linear_pass import generate_linear

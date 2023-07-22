@@ -10,6 +10,9 @@ def generate_add_norm():
         return layer_norm_out.Output("Y")
 
     def replace(x, y, weight, bias):
-        return paddle.incubate.passes.ir.PassDesc.OP.add_norm(X=x, Y=y, Weight=weight, Bias=bias)
+        add_norm = paddle.incubate.passes.ir.PassDesc.OP.add_norm(X=x, Y=y, Weight=weight, Bias=bias)
+        add_norm.Attr("begin_norm_axis").MappedPattern(op="layer_norm", name="begin_norm_axis")
+        add_norm.Attr("epsilon").MappedPattern(op="layer_norm", name="epsilon")
+        return add_norm
 
     return pattern, replace
