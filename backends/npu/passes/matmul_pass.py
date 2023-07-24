@@ -9,7 +9,7 @@ def generate_matmul():
         return matmul_out
 
     def replace(x, y):
-        matmul = paddle.incubate.passes.ir.PassDesc.OP.add_norm(X=x, Y=x)
+        matmul = paddle.incubate.passes.ir.PassDesc.OP.custom_matmul(X=x, Y=y)
         matmul.Attr("trans_x").MappedPattern(op="matmul_v2", name="trans_x")
         matmul.Attr("trans_y").MappedPattern(op="matmul_v2", name="trans_y")
         return matmul

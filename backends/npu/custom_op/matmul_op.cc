@@ -87,7 +87,7 @@ std::vector<std::vector<int64_t>> MatmulOpInferShape(
     new_dims.push_back(N);
   }
 
-  return {out_shape};
+  return {new_dims};
 }
 
 std::vector<paddle::Tensor> MatmulOp(
@@ -129,7 +129,7 @@ std::vector<paddle::Tensor> MatmulOp(
 #endif
 }
 
-PD_BUILD_OP(matmul)
+PD_BUILD_OP(custom_matmul)
     .Inputs({"X", "Y"})
     .Outputs({"Out"})
     .Attrs({"trans_x: bool", 
