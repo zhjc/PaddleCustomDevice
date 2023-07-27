@@ -607,7 +607,7 @@ void NpuOpRunner::Run(aclrtStream stream, bool sync) const {
   /* 规避因910B默认关闭jit_compile导致算子问题，在这里先强制开启，TODO:后续优化开关方式 */
   if (!isAclEnableJit) {
     aclSetCompileopt(ACL_OP_JIT_COMPILE, "enable");
-    std::cout << "ACL_OP_JIT_COMPILE:enable" << std::endl;
+    // std::cout << "ACL_OP_JIT_COMPILE:enable" << std::endl;
     isAclEnableJit = true;
   }
   PY_GIL_RELEASE({
