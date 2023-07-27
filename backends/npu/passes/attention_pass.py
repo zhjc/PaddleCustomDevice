@@ -6,6 +6,7 @@ import unittest
 import paddle
 
 from paddle.incubate.passes import ir
+import time
 
 @paddle.incubate.passes.ir.RegisterPass
 def gen_fuse_multi_head_attention():
@@ -49,28 +50,17 @@ def gen_fuse_multi_head_attention():
         out = reshape_without_shape(out)
 
         return out
-    
+
     def replace(q, concated_k, concated_v, attn_mask):
         reshape_q = reshape_without_shape(q)
         reshape_k = reshape_without_shape(concated_k)
         reshape_v = reshape_without_shape(concated_v)
-
+        
         mask_tmp = ir.PassDesc.OP.unsqueeze2(X=attn_mask)
         mask_tmp.SetAttr("axes", [2])
         new_mask = ir.PassDesc.OP.gather_nd(X=mask_tmp.Output("Out"), Index=paddle.to_tensor([0]))
-
-        q_shape = ir.PassDesc.OP.shape(Input=q)
-        k_shape = ir.PassDesc.OP.shape(Input=concated_k)
-        batch = ir.PassDesc.OP.gather_nd(X=q_shape.Output("Out"), Index=paddle.to_tensor([0]))
-        cast_op = ir.PassDesc.OP.cast
-        cast_op.SetAttr("in_dtype", 2)
-        cast_op.SetAttr("out_dtype", 3)
-        new_batch = cast_op(X=batch.Output("Out"))
-        q_seqlen = ir.PassDesc.OP.gather_nd(X=q_shape.Output("Out"), Index=paddle.to_tensor([1]))
-        kv_seqlen = ir.PassDesc.OP.gather_nd(X=k_shape.Output("Out"), Index=paddle.to_tensor([1]))
-
-        return ir.PassDesc.OP.flash_attention(Query=reshape_q, CacheKey=reshape_k, CacheValue=reshape_v, \
-            Batch=new_batch, QSeqLen=q_seqlen, KVSeqLen=kv_seqlen, AttentionMask=new_mask)
+        
+        return ir.PassDesc.OP.flash_attention(Query=reshape_q, CacheKey=reshape_k, CacheValue=reshape_v, AttentionMask=new_mask)
 
 
     return pattern, replace
@@ -121,9 +111,8 @@ def gen_gpt3_multi_head_attention():
     
     def replace(q, concated_k, concated_v, attn_mask):
         attention_node = ir.PassDesc.OP.multihead_attention(Q=q, ConcatedK=concated_k, ConcatedV=concated_v, AttnMask=attn_mask)
-        attention_node.SetAttr("layer_num", 1.0)
-        attention_node.Attr("layer_num").MappedPattern(op="scale", name="scale", index=1)
-        return attention_node
+        attention_node.SetAttr("layer_num")
+        attention_node.Attr("layer_num").MappedPattern(op="scale", name="scale", layer_num = 1)
+        return 
 
     return pattern, replace
-
