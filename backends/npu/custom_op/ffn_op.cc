@@ -120,7 +120,6 @@ std::vector<paddle::Tensor> FFNOp(
   out->Resize(phi::make_ddim(out_dims));  
   auto out_tensor = paddle::Tensor(out);
 
-  std::cout<<"ffn1"<<std::endl;
   return {out_tensor};
 #endif
 }
