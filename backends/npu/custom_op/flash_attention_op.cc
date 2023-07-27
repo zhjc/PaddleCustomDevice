@@ -17,6 +17,7 @@
 
 #include "paddle/extension.h"
 #include "kernels/funcs/npu_op_runner.h"
+#include <time.h>
 
 std::vector<std::vector<int64_t>> FlashAttentionOpInferShape(
     const std::vector<int64_t>& query_shape) {
@@ -27,10 +28,12 @@ std::vector<std::vector<int64_t>> FlashAttentionOpInferShape(
 std::vector<paddle::Tensor> FlashAttentionOp(const paddle::Tensor& query,
                                              const paddle::Tensor& cache_key,
                                              const paddle::Tensor& cache_value,
-                                             const paddle::Tensor& batch,
-                                             const paddle::Tensor& q_seqlen,
-                                             const paddle::Tensor& kv_seqlen,
+                                             //  const paddle::Tensor& batch,
+                                             //  const paddle::Tensor& q_seqlen,
+                                             //  const paddle::Tensor& kv_seqlen,
                                              const paddle::Tensor& attention_mask) {
+  struct timeval start_time;
+  gettimeofday(&start_time, NULL);
   auto dev_ctx = static_cast<const phi::CustomContext*>(
       paddle::experimental::DeviceContextPool::Instance().Get(query.place()));
   auto stream = static_cast<aclrtStream>(dev_ctx->stream());
@@ -39,9 +42,9 @@ std::vector<paddle::Tensor> FlashAttentionOp(const paddle::Tensor& query,
   auto cache_key_tensor = static_cast<const phi::DenseTensor*>(cache_key.impl().get());
   auto cache_value_tensor = static_cast<const phi::DenseTensor*>(cache_value.impl().get());
   auto attention_mask_tensor = static_cast<const phi::DenseTensor*>(attention_mask.impl().get());
-  auto batch_tensor = static_cast<const phi::DenseTensor*>(batch.impl().get());
-  auto q_seqlen_tensor = static_cast<const phi::DenseTensor*>(q_seqlen.impl().get());
-  auto kv_seqlen_tensor = static_cast<const phi::DenseTensor*>(kv_seqlen.impl().get());
+  // auto batch_tensor = static_cast<const phi::DenseTensor*>(batch.impl().get());
+  // auto q_seqlen_tensor = static_cast<const phi::DenseTensor*>(q_seqlen.impl().get());
+  // auto kv_seqlen_tensor = static_cast<const phi::DenseTensor*>(kv_seqlen.impl().get());
 
   std::shared_ptr<phi::DenseTensor> out_tensor =
       std::make_shared<phi::DenseTensor>();
@@ -52,15 +55,16 @@ std::vector<paddle::Tensor> FlashAttentionOp(const paddle::Tensor& query,
   dev_ctx->Alloc(out_tensor.get(), query_tensor->dtype());
 
   const auto& runner =
-      NpuOpRunner("FlashAttentionDecoder", {*query_tensor, *cache_key_tensor, *cache_value_tensor, 
-      *batch_tensor, *q_seqlen_tensor, *kv_seqlen_tensor, *attention_mask_tensor}, {*out_tensor}, {});
+      NpuOpRunner("FlashAttentionDecoder", {*query_tensor, *cache_key_tensor, *cache_value_tensor,  *attention_mask_tensor}, {*out_tensor}, {});
   runner.Run(stream);    
-  
+  struct timeval end_time;
+  gettimeofday(&end_time, NULL);
+  // printf("!!!!FlashAttentionOp cost: %ld\n", long(end_time.tv_sec * 1000000) + long(end_time.tv_usec) - long(start_time.tv_sec * 1000000) - long(start_time.tv_usec));
   return {paddle::Tensor(out_tensor)};
 }
 
 PD_BUILD_OP(flash_attention)
-    .Inputs({"Query", "CacheKey", "CacheValue", "Batch", "QSeqLen", "KVSeqLen", "AttentionMask"})
+    .Inputs({"Query", "CacheKey", "CacheValue", "AttentionMask"})
     .Outputs({"Output"})
     .SetKernelFn(PD_KERNEL(FlashAttentionOp))
     .SetInferShapeFn(PD_INFER_SHAPE(
