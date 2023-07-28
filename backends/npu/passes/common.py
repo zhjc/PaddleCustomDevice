@@ -24,15 +24,15 @@ def setUp():
             )
 
 def addPasses(pass_builder):
-    pass_builder.append_pass("gen_gpt3_multi_head_attention")
-    # pass_builder.append_pass("gen_fuse_multi_head_attention")
+    # pass_builder.append_pass("gen_gpt3_multi_head_attention")
+    pass_builder.append_pass("gen_fuse_multi_head_attention")
     # pass_builder.append_pass("generate_split")
     pass_builder.append_pass("generate_ffn")
     pass_builder.append_pass("generate_add_norm")
     # pass_builder.append_pass("generate_matmul")
     pass_builder.append_pass("generate_linear")
     pass_builder.append_pass("generate_pad2d")
-    # paddle.fluid.core.register_subgraph_pass("gen_fuse_multi_head_attention")
+    paddle.fluid.core.register_subgraph_pass("gen_fuse_multi_head_attention")
     # paddle.fluid.core.register_subgraph_pass("generate_split")
     paddle.fluid.core.register_subgraph_pass("generate_ffn")
     paddle.fluid.core.register_subgraph_pass("generate_add_norm")
