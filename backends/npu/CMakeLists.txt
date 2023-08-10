@@ -50,6 +50,15 @@ if(WITH_KERNELS)
     RELATIVE ${CMAKE_SOURCE_DIR}
     custom_op/*.cc)
   list(APPEND CUSTOM_NPU_SRCS ${CUSTOM_CUSTOM_OP_SRCS})
+
+  if(WITH_ASCEND_TRANSFORMER_ACC)
+    file(
+      GLOB_RECURSE CUSTOM_ACC_RUNNER_SRCS
+      RELATIVE ${CMAKE_SOURCE_DIR}
+      custom_op/self_attention/*.cpp
+      custom_op/self_attention_kv_cache_fusion_gpt3/*.cpp)
+    list(APPEND CUSTOM_NPU_SRCS ${CUSTOM_ACC_RUNNER_SRCS})
+  endif()
 endif()
 
 # ASCEND TRANSFORMER ACCELERATION
