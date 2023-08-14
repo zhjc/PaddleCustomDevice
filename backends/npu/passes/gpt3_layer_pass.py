@@ -98,7 +98,8 @@ def gen_fuse_attention_layer():
 
         out = reshape_without_shape(out)
 
-
+        out = linear_with_params(out, self_out_linear_weight, self_out_linear_bias)
+        
         dropout_op_2 = ir.PassDesc.OP.dropout
         dropout_op_2.SetAttr("dropout_implementation", "upscale_in_train")
         dropout_op_2._outputs.pop("Mask")
