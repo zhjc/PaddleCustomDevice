@@ -44,6 +44,7 @@
 #include "acltransformer/operation_call.h"
 
 AsdOps::Tensor ConvertDenseTensorToAsdTensor(const phi::DenseTensor &tensor);
+AsdOps::Tensor ConvertCDataToAsdTensor(void *data, size_t count, C_DataType data_type);
 #endif
 
 aclDataType ConvertToNpuDtype(phi::DataType dtype);

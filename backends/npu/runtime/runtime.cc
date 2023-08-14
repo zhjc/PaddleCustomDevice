@@ -25,6 +25,13 @@
 #include "glog/logging.h"
 #include "runtime/flags.h"
 
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+#include "kernels/funcs/format_utils.h"
+#include <asdops/utils/rt/rt.h>
+#include "acltransformer/plan.h"
+#include "acltransformer/ops/all_reduce_operation.h"
+#endif
+
 FLAGS_DEFINE_string(npu_profiling_dir,
                     "ascend_profiling",
                     "ACL profiling output dir");
@@ -515,6 +522,59 @@ C_Status XcclDestroyComm(C_CCLComm comm) {
   return C_SUCCESS;
 }
 
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+struct LayerWorkspace {
+  void *workspace_ = nullptr;
+  uint64_t workspaceSize_ = 0;
+};
+
+LayerWorkspace g_allreduceWorkSpace = {nullptr, 0};
+
+std::unique_ptr<AclTransformer::AllReduceOperation> g_allreduceOp;
+std::unique_ptr<AclTransformer::Plan> g_allreducePlan;
+
+static void SetWorkspace(uint64_t workspaceSize)
+{
+  if (workspaceSize <= g_allreduceWorkSpace.workspaceSize_) {
+    VLOG(4) << "WorkspaceRt::SetWorkspace workspaceSize:" << workspaceSize
+            << " <= workspaceSize_:" << g_allreduceWorkSpace.workspaceSize_ << ", not new device mem";
+    return;
+  }
+
+  if (g_allreduceWorkSpace.workspace_) {
+    AsdRtMemFreeDevice(g_allreduceWorkSpace.workspace_);
+    g_allreduceWorkSpace.workspace_ = nullptr;
+    g_allreduceWorkSpace.workspaceSize_ = 0;
+  }
+
+  int st = AsdRtMemMallocDevice((void **)&(g_allreduceWorkSpace.workspace_), workspaceSize, ASDRT_MEM_DEFAULT);
+  PADDLE_ENFORCE_EQ(st,
+                    ASDRT_SUCCESS,
+                    phi::errors::External(
+                        "AllReduce SetWorkspace AsdRtMemMallocDevice,"
+                        "fail, ret: %d .",
+                        st));
+
+  g_allreduceWorkSpace.workspaceSize_ = workspaceSize;
+}
+
+static void *GetWorkspace() { return g_allreduceWorkSpace.workspace_;}
+
+
+static void BuildVariantPack(void *send_buf,
+                             void *recv_buf,
+                             size_t count,
+                             C_DataType data_type,
+                             AclTransformer::VariantPack &variantPack)
+{
+  variantPack.inTensors.resize(1);
+  variantPack.inTensors.at(0) = ConvertCDataToAsdTensor(send_buf, count, data_type);
+
+  variantPack.outTensors.resize(1);
+  variantPack.outTensors.at(0) = ConvertCDataToAsdTensor(recv_buf, count, data_type);
+}
+#endif
+
 C_Status XcclAllReduce(void *send_buf,
                        void *recv_buf,
                        size_t count,
@@ -522,6 +582,40 @@ C_Status XcclAllReduce(void *send_buf,
                        C_CCLReduceOp op,
                        C_CCLComm comm,
                        C_Stream stream) {
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+  AclTransformer::Handle handle = {reinterpret_cast<aclrtStream>(stream)};
+  if (!g_allreduceOp) {
+    AclTransformer::AllReduceParam param =
+      {0, 0, 0, "sum", "hccl", true, reinterpret_cast<HcclComm>(comm)};
+    g_allreduceOp.reset(new AclTransformer::AllReduceOperation(param));
+    g_allreducePlan.reset(new AclTransformer::Plan);
+    g_allreduceOp->BuildPlan(g_allreducePlan.get());
+  }
+
+  AclTransformer::VariantPack variantPack;
+  BuildVariantPack(send_buf, recv_buf, count, data_type, variantPack);
+  std::cout << "Run in ACC XcclAllReduce" << std::endl;
+  /* Set up */
+  AsdOps::Status st = g_allreducePlan->Setup(handle, variantPack);
+  PADDLE_ENFORCE_EQ(st.Ok(),
+                    true,
+                    phi::errors::External(
+                    "XcclAllReduce Setup plan failed,"
+                    "ret message: %s .", st.Message()));
+  variantPack.workspaceSize = g_allreducePlan->GetWorkspaceSize();
+
+  if (variantPack.workspaceSize > 0) {
+      SetWorkspace(variantPack.workspaceSize);
+      variantPack.workspace = GetWorkspace();
+  }
+  /* Execute */
+  st = g_allreducePlan->Execute(handle, variantPack);
+  PADDLE_ENFORCE_EQ(st.Ok(),
+                    true,
+                    phi::errors::External(
+                    "XcclAllReduce Execute plan failed,"
+                    "ret message: %s .", st.Message()));
+#else
   HCCL_CHECK(HcclAllReduce(send_buf,
                            recv_buf,
                            count,
@@ -529,6 +623,7 @@ C_Status XcclAllReduce(void *send_buf,
                            PDReduceOpToHcclReduceOp(op),
                            reinterpret_cast<HcclComm>(comm),
                            reinterpret_cast<aclrtStream>(stream)));
+#endif
   return C_SUCCESS;
 }
 
