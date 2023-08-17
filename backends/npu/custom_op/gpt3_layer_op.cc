@@ -105,7 +105,7 @@ GPT3LayerDecoderOperation::GPT3LayerDecoderOperation(const GPT3LayerParam &param
   mixdQkvLinearNode.outTensorIds = {INTERMIDATE_MIXEDLINEAROUTQKV};
 
   selfAttentionKvCacheNode.operation.reset(new AclTransformer::SelfAttentionKvCacheFusionGPT3Operation(
-      {param_.head_num, param_.layer_num - 1, param_.head_dim, param_.seqLen, param_.tokenOffset}));
+      {param_.head_num, param_.layer_num - 1, param_.head_dim, 0, 0, 0, "chatglm6b", param_.seqLen, param_.tokenOffset}));
   selfAttentionKvCacheNode.inTensorIds = {INTERMIDATE_MIXEDLINEAROUTQKV,
                                           IN_PASTKEY,
                                           IN_PASTVALUE,
