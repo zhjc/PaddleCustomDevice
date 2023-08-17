@@ -11,13 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
 #include <iostream>
 #include <vector>
 
 #include "kernels/funcs/npu_op_runner.h"
 #include "paddle/extension.h"
-#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+
 #include "kernels/funcs/format_utils.h"
 #include "acltransformer/params/norm.h"
 #include "norm_matmul_op.h"
@@ -35,7 +35,6 @@
 
 #include "kernels/funcs/format_utils.h"
 
-#endif
 namespace AclTransformer {
 enum NormMatmulTensorId {
   IN_HIDDENSTATES = 0,
@@ -340,3 +339,4 @@ PD_BUILD_OP(norm_matmul_op)
     .SetKernelFn(PD_KERNEL(NormMatmulOp))
     .SetInferShapeFn(PD_INFER_SHAPE(
         NormMatmulOpInferShape));  // neccessary if the op has muti_inputs
+#endif // PADDLE_WITH_ASCEND_TRANSFORMER_ACC

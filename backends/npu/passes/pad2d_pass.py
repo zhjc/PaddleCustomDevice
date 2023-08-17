@@ -5,12 +5,21 @@ import paddle
 @paddle.incubate.passes.ir.RegisterPass
 def generate_pad2d():
     def pattern(x):
-        pad3d_in = paddle.incubate.passes.ir.PassDesc.OP.unsqueeze2(X=x)
-        pad3d_out = paddle.incubate.passes.ir.PassDesc.OP.pad3d(X=pad3d_in.Output("Out"))
-        res = paddle.incubate.passes.ir.PassDesc.OP.squeeze2(X=pad3d_out)
+        unsqueeze_op = paddle.incubate.passes.ir.PassDesc.OP.unsqueeze2(X=x)
+        unsqueeze_op._outputs.pop("XShape")
+        pad3d_in = unsqueeze_op(X=x)
+
+        pad3d_out = paddle.incubate.passes.ir.PassDesc.OP.pad3d(X=pad3d_in)
+
+        squeeze_op = paddle.incubate.passes.ir.PassDesc.OP.squeeze2(X=pad3d_out)
+        squeeze_op._outputs.pop("XShape")
+        res = squeeze_op(X=pad3d_out)
+
         return res.Output("Out")
 
     def replace(x):
-        return paddle.incubate.passes.ir.PassDesc.OP.pad2d(X=x)
+        pad = paddle.incubate.passes.ir.PassDesc.OP.pad3d(X=x)
+        pad.Attr("paddings").MappedPattern(op="pad3d", name="paddings")
+        return pad
 
     return pattern, replace

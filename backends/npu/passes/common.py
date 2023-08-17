@@ -13,6 +13,7 @@ from .matmul_pass import generate_matmul
 from .attention_pass import gen_fuse_multi_head_attention, gen_gpt3_multi_head_attention
 from .linear_pass import generate_linear
 from .pad2d_pass import generate_pad2d
+from .gpt3_layer_pass import gen_fuse_attention_layer, gen_fuse_attention_cached_layer, gen_fuse_attention_parallel_layer, gen_fuse_attention_cached_parallel_layer
 
 paddle.enable_static()
 

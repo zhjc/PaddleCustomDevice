@@ -514,6 +514,7 @@ C_Status XcclCommInitRank(size_t nranks,
                            reinterpret_cast<HcclRootInfo *>(unique_id->data),
                            rank,
                            reinterpret_cast<HcclComm *>(comm)));
+  std::cout << "ranksize: " << nranks << " HcclComm: " << *reinterpret_cast<HcclComm *>(comm) << " rank: " << rank << std::endl;
   return C_SUCCESS;
 }
 
@@ -594,7 +595,7 @@ C_Status XcclAllReduce(void *send_buf,
 
   AclTransformer::VariantPack variantPack;
   BuildVariantPack(send_buf, recv_buf, count, data_type, variantPack);
-  std::cout << "Run in ACC XcclAllReduce" << std::endl;
+
   /* Set up */
   AsdOps::Status st = g_allreducePlan->Setup(handle, variantPack);
   PADDLE_ENFORCE_EQ(st.Ok(),

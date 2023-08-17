@@ -10,7 +10,7 @@ def generate_assign():
     def pattern(x, y):
         return paddle.assign(x), paddle.assign(y)
 
-    def replace(x, y, bias):
+    def replace(x, y):
         return x, y
 
     return pattern, replace

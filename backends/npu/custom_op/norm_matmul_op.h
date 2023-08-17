@@ -15,6 +15,7 @@
 #ifndef NORM_MATMUL_OP_H
 #define NORM_MATMUL_OP_H
 
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
 #include "acltransformer/graph_operation.h"
 
 struct NormMatmulWorkspace {
@@ -46,4 +47,5 @@ class NormMatmulOperation : public GraphOperation {
   NormMatmulParam param_;
 };
 }  // namespace AclTransformer
+#endif // PADDLE_WITH_ASCEND_TRANSFORMER_ACC
 #endif
