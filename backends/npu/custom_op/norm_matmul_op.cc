@@ -18,19 +18,22 @@
 #include "kernels/funcs/npu_op_runner.h"
 #include "paddle/extension.h"
 #ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
-#include <asdops/utils/time/timer.h>
-#include <audiosessiontypes.h>/utils/rt/rt.h>
-#include <audiosessiontypes.h>/utils/log/log.h>
-#include <audiosessiontypes.h>/utils/singleton/singleton.h>
-
-#include "acltransformer/config.h"
-#include "acltransformer/ops/matmul_operation.h"
-#include "acltransformer/ops/norm_operation.h"
+#include "kernels/funcs/format_utils.h"
 #include "acltransformer/params/norm.h"
+#include "norm_matmul_op.h"
+#include <asdops/utils/rt/rt.h>
+#include <asdops/utils/time/timer.h>
+#include <asdops/utils/log/log.h>
+#include <asdops/utils/singleton/singleton.h>
+#include "acltransformer/config.h"
 #include "acltransformer/plan.h"
 #include "acltransformer/statistic.h"
+
+#include "acltransformer/ops/norm_operation.h"
+#include "acltransformer/ops/matmul_operation.h"
+
+
 #include "kernels/funcs/format_utils.h"
-#include "norm_matmul_op.h"
 
 #endif
 namespace AclTransformer {
@@ -257,6 +260,11 @@ std::vector<paddle::Tensor> NormMatmulOp(const paddle::Tensor &input_x,
                                          int begin_norm_axis,
                                          bool trans_x,
                                          bool trans_y) {
+  // std::cout << "run in NormMatmulOp" << std::endl;
+  // std::cout << "trans x = " << trans_x << std::endl;
+  // std::cout << "trans y = " << trans_y << std::endl;
+  // std::cout << "begin norm axis = " << begin_norm_axis << std::endl;
+  // std::cout << "epsilon  = " << epsilon << std::endl;
 
   auto dev_ctx = static_cast<const phi::CustomContext *>(
       paddle::experimental::DeviceContextPool::Instance().Get(input_x.place()));
@@ -278,7 +286,8 @@ std::vector<paddle::Tensor> NormMatmulOp(const paddle::Tensor &input_x,
                                           epsilon,
                                           begin_norm_axis,
                                           trans_x,
-                                          trans_y).at(0);
+                                          trans_y)
+                       .at(0);
 
   std::shared_ptr<phi::DenseTensor> out_tensor =
       std::make_shared<phi::DenseTensor>();
@@ -330,4 +339,4 @@ PD_BUILD_OP(norm_matmul_op)
     })
     .SetKernelFn(PD_KERNEL(NormMatmulOp))
     .SetInferShapeFn(PD_INFER_SHAPE(
-        NormMatmulOpInferShape));  // neccessary if the op has muti_inputs                                                                                                                                                                                                                      }
+        NormMatmulOpInferShape));  // neccessary if the op has muti_inputs
