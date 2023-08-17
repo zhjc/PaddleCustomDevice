@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ACLTRANSTORMOR_NORM_MATMUL_OP_H
-#define ACLTRANSTORMOR_NORM_MATMUL_OP_H
+#ifndef NORM_MATMUL_OP_H
+#define NORM_MATMUL_OP_H
 
 #include "acltransformer/graph_operation.h"
 
