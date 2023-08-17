@@ -6,7 +6,7 @@ import unittest
 import paddle
 
 @paddle.incubate.passes.ir.RegisterPass
-def generate_ffn():
+def generate_assign():
     def pattern(x, y):
         return paddle.assign(x), paddle.assign(y)
 

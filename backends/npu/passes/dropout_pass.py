@@ -1,6 +1,6 @@
 from paddle.incubate.passes import ir
 
-@paddle.incubate.passes.ir.RegisterPass
+@ir.RegisterPass
 def remove_dropout_after_ele_add():
     def pattern(x, y):
         x_plus_y = ir.PassDesc.OP.elementwise_add(X=x, Y=y)
@@ -14,7 +14,7 @@ def remove_dropout_after_ele_add():
     
     return pattern, replace
 
-@paddle.incubate.passes.ir.RegisterPass
+@ir.RegisterPass
 def remove_dropout_after_softmax():
     def pattern(x):
         x = ir.PassDesc.OP.softmax(X=x)
