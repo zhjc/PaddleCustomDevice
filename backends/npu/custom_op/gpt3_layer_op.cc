@@ -368,19 +368,16 @@ std::vector<paddle::Tensor> GPT3LayerOp(
     const paddle::Tensor &attention_mask,
     const paddle::Tensor &past_key,
     const paddle::Tensor &past_value,
-    int begin_norm_axis = 2,
-    float epsilon = 1e-5,
-    int head_dim = 1,
-    int head_num = 1,
-    int layer_num = 1)
-{
+    int begin_norm_axis,
+    float epsilon,
+    std::vector<int32_t> shape,
+    float scale) {
 
   AsdOps::Timer timer;
-  begin_norm_axis = 2;
-  epsilon = 1e-5;
-  head_dim = 128; // 6.7B
-  head_num = 32;
-  layer_num = 32;
+  
+  int32_t layer_num = (int32_t)scale;
+  int32_t head_dim = shape[3] / 3;
+  int32_t head_num = hidden.shape()[2] / head_dim;
 
   static uint32_t layerId = 0;
 
@@ -521,9 +518,8 @@ PD_BUILD_OP(gpt3_layer)
     .Outputs({"Out", "PresentKey", "PresentValue"})
     .Attrs({"begin_norm_axis: int",
             "epsilon: float",
-            "head_dim: int",
-            "head_num: int",
-            "layer_num: int"})
+            "shape: std::vector<int>",
+            "scale: float"})
     .SetKernelFn(PD_KERNEL(GPT3LayerOp))
     .SetInferShapeFn(PD_INFER_SHAPE(
         GPT3LayerOpInferShape)); // neccessary if the op has muti_inputs
