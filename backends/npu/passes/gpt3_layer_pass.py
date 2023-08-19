@@ -151,6 +151,11 @@ def gen_fuse_attention_layer():
         gpt3_layer_op._desc.set_output("PresentKey", [outs_name[1]])
         gpt3_layer_op._desc.set_output("PresentValue", [outs_name[2]])
 
+        gpt3_layer_op.Attr("begin_norm_axis").MappedPattern(op="layer_norm", name="begin_norm_axis", index=0)
+        gpt3_layer_op.Attr("epsilon").MappedPattern(op="layer_norm", name="epsilon", index=0)
+        gpt3_layer_op.Attr("shape").MappedPattern(op="reshape2", name="shape", index=0)
+        gpt3_layer_op.Attr("scale").MappedPattern(op="scale", name="scale", index=1)
+        
         block = paddle.static.default_main_program().current_block()
         results = []
         for out in outs_name:
@@ -271,6 +276,11 @@ def gen_fuse_attention_cached_layer():
         gpt3_layer_cache_op._desc.set_output("PresentKey", [outs_name[1]])
         gpt3_layer_cache_op._desc.set_output("PresentValue", [outs_name[2]])
 
+        gpt3_layer_cache_op.Attr("begin_norm_axis").MappedPattern(op="layer_norm", name="begin_norm_axis", index=0)
+        gpt3_layer_cache_op.Attr("epsilon").MappedPattern(op="layer_norm", name="epsilon", index=0)
+        gpt3_layer_cache_op.Attr("shape").MappedPattern(op="reshape2", name="shape", index=0)
+        gpt3_layer_cache_op.Attr("scale").MappedPattern(op="scale", name="scale", index=1)
+        
         block = paddle.static.default_main_program().current_block()
         results = []
         for out in outs_name:
