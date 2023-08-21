@@ -165,18 +165,25 @@ std::vector<std::vector<int64_t>> GPT3LayerWithoutCacheOpInferShape(
     const std::vector<int64_t>& ffn_linear_bias_shape,
     const std::vector<int64_t>& ffn_out_linear_weight_shape,
     const std::vector<int64_t>& ffn_out_linear_bias_shape,
-    const std::vector<int64_t>& attention_mask_shape) {
+    const std::vector<int64_t>& attention_mask_shape,
+    int begin_norm_axis,
+	  float epsilon,
+	  std::vector<int32_t> shape,
+	  float scale) {
+  int32_t head_dim = shape[3] / 3;
+  int32_t head_num = hidden_shape[2] / head_dim;
+  
   std::vector<int64_t> presentkey_shape; /* [bs, seq_len, hidden_size] */
   std::vector<int64_t> presentvalue_shape; /* [bs, seq_len, hidden_size] */
   presentkey_shape.push_back(hidden_shape.at(0));
   presentkey_shape.push_back(hidden_shape.at(1));
-  presentkey_shape.push_back(32);  /* TODO:当前写死了6.7B模型  */
-  presentkey_shape.push_back(128);
+  presentkey_shape.push_back(head_num);  /* TODO:当前写死了6.7B模型  */
+  presentkey_shape.push_back(head_dim);
             
   presentvalue_shape.push_back(hidden_shape.at(0));
   presentvalue_shape.push_back(hidden_shape.at(1));
-  presentvalue_shape.push_back(32);
-  presentvalue_shape.push_back(128);
+  presentvalue_shape.push_back(head_num);
+  presentvalue_shape.push_back(head_dim);
                     
   return {hidden_shape, presentkey_shape, presentvalue_shape};
 }
@@ -332,27 +339,25 @@ std::vector<paddle::Tensor> GPT3LayerWithoutCacheOp(const paddle::Tensor& hidden
                                                      ffn_linear_bias.shape(),
                                                      ffn_out_linear_weight.shape(),
                                                      ffn_out_linear_bias.shape(),
-                                                     attention_mask.shape());
-
-  std::vector<int64_t> past_kv_shape;
-  past_kv_shape.push_back(hidden.shape().at(0));
-  past_kv_shape.push_back(hidden.shape().at(1));
-  past_kv_shape.push_back(head_num);
-  past_kv_shape.push_back(head_dim);
+                                                     attention_mask.shape(),
+													                           begin_norm_axis,
+                                                     epsilon,
+                                                     shape,
+                                                     scale);
 
   std::shared_ptr<phi::DenseTensor> gpt3layerout_tensor =
       std::make_shared<phi::DenseTensor>();
-  gpt3layerout_tensor->Resize(phi::make_ddim(hidden.shape()));
+  gpt3layerout_tensor->Resize(phi::make_ddim(out_shape.at(0)));
   dev_ctx->Alloc(gpt3layerout_tensor.get(), inputs.at(0)->dtype());
 
   std::shared_ptr<phi::DenseTensor> presentkey_tensor =
       std::make_shared<phi::DenseTensor>();
-  presentkey_tensor->Resize(phi::make_ddim(past_kv_shape));
+  presentkey_tensor->Resize(phi::make_ddim(out_shape.at(1)));
   dev_ctx->Alloc(presentkey_tensor.get(), inputs.at(0)->dtype());
 
   std::shared_ptr<phi::DenseTensor> presentvalue_tensor =
   std::make_shared<phi::DenseTensor>();
-  presentvalue_tensor->Resize(phi::make_ddim(past_kv_shape));
+  presentvalue_tensor->Resize(phi::make_ddim(out_shape.at(2)));
   dev_ctx->Alloc(presentvalue_tensor.get(), inputs.at(0)->dtype());
                      
   std::vector<const phi::DenseTensor*> outputs;
