@@ -60,6 +60,11 @@ enum GPT3LayerDecoderTensorId
 
   OUT_GPT3LAYEROUT,
 
+  INTERMIDATE_FLOATCASTNORMWEIGHTOUT,
+  INTERMIDATE_FLOATCASTNORMBIASOUT,
+  INTERMIDATE_FLOATCASTSELFNORMWEIGHTOUT,
+  INTERMIDATE_FLOATCASTSELFNORMBIASOUT,
+
   INTERMIDATE_INPUTNORMOUT,
   INTERMIDATE_MIXEDLINEAROUTQKV,
 
@@ -73,8 +78,8 @@ enum GPT3LayerDecoderTensorId
 
 static const uint64_t IN_TENSOR_COUNT = 19;
 static const uint64_t OUT_TENSOR_COUNT = 1;
-static const uint64_t INTERMEDIATE_TENSOR_COUNT = 8;
-static const uint64_t NODE_COUNT = 9;
+static const uint64_t INTERMEDIATE_TENSOR_COUNT = 12;
+static const uint64_t NODE_COUNT = 11;
 
 GPT3LayerDecoderOperation::GPT3LayerDecoderOperation(const GPT3LayerParam &param)
     : GraphOperation("GPT3LayerDecoderOperation"), param_(param)
@@ -94,10 +99,22 @@ GPT3LayerDecoderOperation::GPT3LayerDecoderOperation(const GPT3LayerParam &param
   GraphOperation::Node &ffnNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &ffnLinearNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &ffnResidualAddNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastNormWeightNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastNormBiasNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastSelfNormWeightNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastSelfNormBiasNode = opGraph_.nodes.at(nodeId++);
+
+  floatCastNormWeightNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastNormWeightNode.inTensorIds = {IN_NORMWEIGHT};
+  floatCastNormWeightNode.outTensorIds = {INTERMIDATE_FLOATCASTNORMWEIGHTOUT};
+
+  floatCastNormBiasNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastNormBiasNode.inTensorIds = {IN_NORMBIAS};
+  floatCastNormBiasNode.outTensorIds = {INTERMIDATE_FLOATCASTNORMBIASOUT};
 
   inputNormNode.operation.reset(new AclTransformer::NormOperation(
       {param_.layerNormEps, param_.layerNormBeginNormAxis, param_.layerNormBeginNormAxis}));
-  inputNormNode.inTensorIds = {IN_HIDDENSTATES, IN_NORMWEIGHT, IN_NORMBIAS};
+  inputNormNode.inTensorIds = {IN_HIDDENSTATES, INTERMIDATE_FLOATCASTNORMWEIGHTOUT, IN_NORMBIAS};
   inputNormNode.outTensorIds = {INTERMIDATE_INPUTNORMOUT};
 
   mixdQkvLinearNode.operation.reset(new AclTransformer::LinearOperation({false, true})); /* 加速库默认会将w进行转置 */
@@ -124,8 +141,16 @@ GPT3LayerDecoderOperation::GPT3LayerDecoderOperation(const GPT3LayerParam &param
   selfResidualAddNode.inTensorIds = {IN_HIDDENSTATES, INTERMIDATE_SELFLINEAROUT};
   selfResidualAddNode.outTensorIds = {INTERMIDATE_SELFRESIDUALADDOUT};
 
+  floatCastSelfNormWeightNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastSelfNormWeightNode.inTensorIds = {IN_SELFOUTNORMWEIGHT};
+  floatCastSelfNormWeightNode.outTensorIds = {INTERMIDATE_FLOATCASTSELFNORMWEIGHTOUT};
+
+  floatCastSelfNormBiasNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastSelfNormBiasNode.inTensorIds = {IN_SELFOUTNORMBIAS};
+  floatCastSelfNormBiasNode.outTensorIds = {INTERMIDATE_FLOATCASTSELFNORMBIASOUT};
+
   selfNormNode.operation.reset(new AclTransformer::NormOperation({param_.layerNormEps}));
-  selfNormNode.inTensorIds = {INTERMIDATE_SELFRESIDUALADDOUT, IN_SELFOUTNORMWEIGHT, IN_SELFOUTNORMBIAS};
+  selfNormNode.inTensorIds = {INTERMIDATE_SELFRESIDUALADDOUT, INTERMIDATE_FLOATCASTSELFNORMWEIGHTOUT, INTERMIDATE_FLOATCASTSELFNORMBIASOUT};
   selfNormNode.outTensorIds = {INTERMIDATE_SELFNORMOUT};
 
   ffnNode.operation.reset(new AclTransformer::FfnOperation({false, true}));
