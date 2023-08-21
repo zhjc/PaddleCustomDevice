@@ -64,10 +64,10 @@ NormMatmulOperation::NormMatmulOperation(const NormMatmulParam &param)
   opGraph_.nodes.resize(NODE_COUNT);
 
   size_t nodeId = 0;
-  GraphOperation::Node &inputNormNode = opGraph_.nodes.at(nodeId++);
-  GraphOperation::Node &matMulNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &floatCastNormWeightNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &floatCastNormBiasNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &inputNormNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &matMulNode = opGraph_.nodes.at(nodeId++);
 
   floatCastNormWeightNode.operation.reset(new AclTransformer::FloatCastOperation());
   floatCastNormWeightNode.inTensorIds = {IN_NORMWEIGHT};

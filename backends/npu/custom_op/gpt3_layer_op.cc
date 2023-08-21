@@ -90,19 +90,19 @@ GPT3LayerDecoderOperation::GPT3LayerDecoderOperation(const GPT3LayerParam &param
   opGraph_.nodes.resize(NODE_COUNT);
 
   size_t nodeId = 0;
+  GraphOperation::Node &floatCastNormWeightNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastNormBiasNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &inputNormNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &mixdQkvLinearNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfAttentionKvCacheNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfOutLinearNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfResidualAddNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastSelfNormWeightNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastSelfNormBiasNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfNormNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &ffnNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &ffnLinearNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &ffnResidualAddNode = opGraph_.nodes.at(nodeId++);
-  GraphOperation::Node &floatCastNormWeightNode = opGraph_.nodes.at(nodeId++);
-  GraphOperation::Node &floatCastNormBiasNode = opGraph_.nodes.at(nodeId++);
-  GraphOperation::Node &floatCastSelfNormWeightNode = opGraph_.nodes.at(nodeId++);
-  GraphOperation::Node &floatCastSelfNormBiasNode = opGraph_.nodes.at(nodeId++);
 
   floatCastNormWeightNode.operation.reset(new AclTransformer::FloatCastOperation());
   floatCastNormWeightNode.inTensorIds = {IN_NORMWEIGHT};
@@ -114,7 +114,7 @@ GPT3LayerDecoderOperation::GPT3LayerDecoderOperation(const GPT3LayerParam &param
 
   inputNormNode.operation.reset(new AclTransformer::NormOperation(
       {param_.layerNormEps, param_.layerNormBeginNormAxis, param_.layerNormBeginNormAxis}));
-  inputNormNode.inTensorIds = {IN_HIDDENSTATES, INTERMIDATE_FLOATCASTNORMWEIGHTOUT, IN_NORMBIAS};
+  inputNormNode.inTensorIds = {IN_HIDDENSTATES, INTERMIDATE_FLOATCASTNORMWEIGHTOUT, INTERMIDATE_FLOATCASTNORMBIASOUT};
   inputNormNode.outTensorIds = {INTERMIDATE_INPUTNORMOUT};
 
   mixdQkvLinearNode.operation.reset(new AclTransformer::LinearOperation({false, true})); /* 加速库默认会将w进行转置 */
