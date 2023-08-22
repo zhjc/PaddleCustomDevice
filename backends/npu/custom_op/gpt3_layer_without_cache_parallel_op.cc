@@ -340,7 +340,7 @@ std::vector<paddle::Tensor> GPT3LayerWithoutCacheParallelOp(
     float scale) {
   int32_t layer_num = (int32_t)scale;
   int32_t head_dim = shape[3] / 3;
-  int32_t head_num = hidden.shape()[2] / head_dim;
+  int32_t head_num = self_out_linear_weight.shape()[0] / head_dim;
 
   auto dev_ctx = static_cast<const phi::CustomContext*>(
       paddle::experimental::DeviceContextPool::Instance().Get(hidden.place()));
