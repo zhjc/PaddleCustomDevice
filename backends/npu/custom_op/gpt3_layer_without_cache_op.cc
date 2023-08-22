@@ -23,6 +23,7 @@
 #include "acltransformer/config.h"
 #include "acltransformer/plan.h"
 #include "acltransformer/ops/add_operation.h"
+#include "acltransformer/ops/float_cast_operation.h"
 #include "acltransformer/ops/norm_operation.h"
 #include "acltransformer/ops/linear_operation.h"
 #include "self_attention/self_attention_without_kv_cache_gpt3_operation.h"
@@ -50,11 +51,17 @@ enum GPT3LayerWithoutCacheDecoderTensorId {
   OUT_PRESENTKEY_NOCACHE,
   OUT_PRESENTVALUE_NOCACHE,
 
+  INTERMIDATE_FLOATCASTNORMWEIGHTOUT_NOCACHE,
+  INTERMIDATE_FLOATCASTNORMBIASOUT_NOCACHE,
   INTERMIDATE_INPUTNORMOUT_NOCACHE,
   INTERMIDATE_MIXEDLINEAROUTQKV_NOCACHE,
   INTERMIDATE_SELFOUT_NOCACHE,
   INTERMIDATE_SELFLINEAROUT_NOCACHE,
   INTERMIDATE_SELFRESIDUALADDOUT_NOCACHE,
+
+  INTERMIDATE_FLOATCASTSELFNORMWEIGHTOUT_NOCACHE,
+  INTERMIDATE_FLOATCASTSELFNORMBIASOUT_NOCACHE,
+
   INTERMIDATE_SELFNORMOUT_NOCACHE,
   INTERMIDATE_FFNOUT_NOCACHE,
   INTERMIDATE_FFNLINEAROUT_NOCACHE,
@@ -62,8 +69,8 @@ enum GPT3LayerWithoutCacheDecoderTensorId {
 
 static const uint64_t IN_TENSOR_COUNT = 14;
 static const uint64_t OUT_TENSOR_COUNT = 3;
-static const uint64_t INTERMEDIATE_TENSOR_COUNT = 8;
-static const uint64_t NODE_COUNT = 9;
+static const uint64_t INTERMEDIATE_TENSOR_COUNT = 12;
+static const uint64_t NODE_COUNT = 13;
 
 GPT3LayerWithoutCacheDecoderOperation::GPT3LayerWithoutCacheDecoderOperation(const GPT3LayerParam &param)
     : GraphOperation("GPT3LayerWithoutCacheDecoderOperation"), param_(param)
@@ -74,19 +81,31 @@ GPT3LayerWithoutCacheDecoderOperation::GPT3LayerWithoutCacheDecoderOperation(con
   opGraph_.nodes.resize(NODE_COUNT);
 
   size_t nodeId = 0;
+  GraphOperation::Node &floatCastNormWeightNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastNormBiasNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &inputNormNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &mixdQkvLinearNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfAttentionKvCacheNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfOutLinearNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfResidualAddNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastSelfNormWeightNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastSelfNormBiasNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfNormNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &ffnNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &ffnLinearNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &ffnResidualAddNode = opGraph_.nodes.at(nodeId++);
 
+  floatCastNormWeightNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastNormWeightNode.inTensorIds = {IN_NORMWEIGHT_NOCACHE};
+  floatCastNormWeightNode.outTensorIds = {INTERMIDATE_FLOATCASTNORMWEIGHTOUT_NOCACHE};
+
+  floatCastNormBiasNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastNormBiasNode.inTensorIds = {IN_NORMBIAS_NOCACHE};
+  floatCastNormBiasNode.outTensorIds = {INTERMIDATE_FLOATCASTNORMBIASOUT_NOCACHE};
+
   inputNormNode.operation.reset(new AclTransformer::NormOperation(
                       {param_.layerNormEps, param_.layerNormBeginNormAxis, param_.layerNormBeginNormAxis}));
-  inputNormNode.inTensorIds = {IN_HIDDENSTATES_NOCACHE, IN_NORMWEIGHT_NOCACHE, IN_NORMBIAS_NOCACHE};
+  inputNormNode.inTensorIds = {IN_HIDDENSTATES_NOCACHE, INTERMIDATE_FLOATCASTNORMWEIGHTOUT_NOCACHE, INTERMIDATE_FLOATCASTNORMBIASOUT_NOCACHE};
   inputNormNode.outTensorIds = {INTERMIDATE_INPUTNORMOUT_NOCACHE};
 
   mixdQkvLinearNode.operation.reset(new AclTransformer::LinearOperation({false, true})); /* 加速库默认会将w进行转置 */
@@ -106,9 +125,18 @@ GPT3LayerWithoutCacheDecoderOperation::GPT3LayerWithoutCacheDecoderOperation(con
   selfResidualAddNode.operation.reset(new AclTransformer::AddOperation({}));
   selfResidualAddNode.inTensorIds = {IN_HIDDENSTATES_NOCACHE, INTERMIDATE_SELFLINEAROUT_NOCACHE};
   selfResidualAddNode.outTensorIds = {INTERMIDATE_SELFRESIDUALADDOUT_NOCACHE};
-          
-  selfNormNode.operation.reset(new AclTransformer::NormOperation({param_.layerNormEps}));
-  selfNormNode.inTensorIds = {INTERMIDATE_SELFRESIDUALADDOUT_NOCACHE, IN_SELFOUTNORMWEIGHT_NOCACHE, IN_SELFOUTNORMBIAS_NOCACHE};
+
+  floatCastSelfNormWeightNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastSelfNormWeightNode.inTensorIds = {IN_SELFOUTNORMWEIGHT_NOCACHE};
+  floatCastSelfNormWeightNode.outTensorIds = {INTERMIDATE_FLOATCASTSELFNORMWEIGHTOUT_NOCACHE};
+
+  floatCastSelfNormBiasNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastSelfNormBiasNode.inTensorIds = {IN_SELFOUTNORMBIAS_NOCACHE};
+  floatCastSelfNormBiasNode.outTensorIds = {INTERMIDATE_FLOATCASTSELFNORMBIASOUT_NOCACHE};
+
+  selfNormNode.operation.reset(new AclTransformer::NormOperation(
+      {param_.layerNormEps, param_.layerNormBeginNormAxis, param_.layerNormBeginNormAxis}));
+  selfNormNode.inTensorIds = {INTERMIDATE_SELFRESIDUALADDOUT_NOCACHE, INTERMIDATE_FLOATCASTSELFNORMWEIGHTOUT_NOCACHE, INTERMIDATE_FLOATCASTSELFNORMBIASOUT_NOCACHE};
   selfNormNode.outTensorIds = {INTERMIDATE_SELFNORMOUT_NOCACHE};
           
   ffnNode.operation.reset(new AclTransformer::FfnOperation({false, true}));
@@ -165,18 +193,25 @@ std::vector<std::vector<int64_t>> GPT3LayerWithoutCacheOpInferShape(
     const std::vector<int64_t>& ffn_linear_bias_shape,
     const std::vector<int64_t>& ffn_out_linear_weight_shape,
     const std::vector<int64_t>& ffn_out_linear_bias_shape,
-    const std::vector<int64_t>& attention_mask_shape) {
+    const std::vector<int64_t>& attention_mask_shape,
+    int begin_norm_axis,
+	  float epsilon,
+	  std::vector<int32_t> shape,
+	  float scale) {
+  int32_t head_dim = shape[3] / 3;
+  int32_t head_num = hidden_shape[2] / head_dim;
+  
   std::vector<int64_t> presentkey_shape; /* [bs, seq_len, hidden_size] */
   std::vector<int64_t> presentvalue_shape; /* [bs, seq_len, hidden_size] */
   presentkey_shape.push_back(hidden_shape.at(0));
   presentkey_shape.push_back(hidden_shape.at(1));
-  presentkey_shape.push_back(32);  /* TODO:当前写死了6.7B模型  */
-  presentkey_shape.push_back(128);
+  presentkey_shape.push_back(head_num);  /* TODO:当前写死了6.7B模型  */
+  presentkey_shape.push_back(head_dim);
             
   presentvalue_shape.push_back(hidden_shape.at(0));
   presentvalue_shape.push_back(hidden_shape.at(1));
-  presentvalue_shape.push_back(32);
-  presentvalue_shape.push_back(128);
+  presentvalue_shape.push_back(head_num);
+  presentvalue_shape.push_back(head_dim);
                     
   return {hidden_shape, presentkey_shape, presentvalue_shape};
 }
@@ -332,27 +367,25 @@ std::vector<paddle::Tensor> GPT3LayerWithoutCacheOp(const paddle::Tensor& hidden
                                                      ffn_linear_bias.shape(),
                                                      ffn_out_linear_weight.shape(),
                                                      ffn_out_linear_bias.shape(),
-                                                     attention_mask.shape());
-
-  std::vector<int64_t> past_kv_shape;
-  past_kv_shape.push_back(hidden.shape().at(0));
-  past_kv_shape.push_back(hidden.shape().at(1));
-  past_kv_shape.push_back(head_num);
-  past_kv_shape.push_back(head_dim);
+                                                     attention_mask.shape(),
+													                           begin_norm_axis,
+                                                     epsilon,
+                                                     shape,
+                                                     scale);
 
   std::shared_ptr<phi::DenseTensor> gpt3layerout_tensor =
       std::make_shared<phi::DenseTensor>();
-  gpt3layerout_tensor->Resize(phi::make_ddim(hidden.shape()));
+  gpt3layerout_tensor->Resize(phi::make_ddim(out_shape.at(0)));
   dev_ctx->Alloc(gpt3layerout_tensor.get(), inputs.at(0)->dtype());
 
   std::shared_ptr<phi::DenseTensor> presentkey_tensor =
       std::make_shared<phi::DenseTensor>();
-  presentkey_tensor->Resize(phi::make_ddim(past_kv_shape));
+  presentkey_tensor->Resize(phi::make_ddim(out_shape.at(1)));
   dev_ctx->Alloc(presentkey_tensor.get(), inputs.at(0)->dtype());
 
   std::shared_ptr<phi::DenseTensor> presentvalue_tensor =
   std::make_shared<phi::DenseTensor>();
-  presentvalue_tensor->Resize(phi::make_ddim(past_kv_shape));
+  presentvalue_tensor->Resize(phi::make_ddim(out_shape.at(2)));
   dev_ctx->Alloc(presentvalue_tensor.get(), inputs.at(0)->dtype());
                      
   std::vector<const phi::DenseTensor*> outputs;
@@ -392,6 +425,12 @@ variantPack.workspaceSize = g_gpt3WithoutCachePlan->GetWorkspaceSize();
                     phi::errors::External(
                     "GPT3LayerWithoutCacheOp Execute plan failed,"
                     "ret message: %s .", st.Message()));
+                    
+  static uint64_t executeCount_ = 0;
+  executeCount_++;
+  if ((executeCount_) % layer_num == 0) { // 1.....32,第32次同步
+    int ret = aclrtSynchronizeStream(stream);
+  }  
 
   return {paddle::Tensor(gpt3layerout_tensor),
           paddle::Tensor(presentkey_tensor),

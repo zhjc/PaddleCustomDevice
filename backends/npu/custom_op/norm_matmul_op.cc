@@ -31,6 +31,7 @@
 
 #include "acltransformer/ops/norm_operation.h"
 #include "acltransformer/ops/matmul_operation.h"
+#include "acltransformer/ops/float_cast_operation.h"
 
 
 #include "kernels/funcs/format_utils.h"
@@ -44,13 +45,15 @@ enum NormMatmulTensorId {
 
   OUT_NORMMATMULOUT,
 
+  INTERMIDATE_FLOATCASTNORMWEIGHTOUT,
+  INTERMIDATE_FLOATCASTNORMBIASOUT,
   INTERMIDATE_INPUTNORMOUT,
 };
 
 static const uint64_t IN_TENSOR_COUNT = 4;
 static const uint64_t OUT_TENSOR_COUNT = 1;
-static const uint64_t INTERMEDIATE_TENSOR_COUNT = 1;
-static const uint64_t NODE_COUNT = 2;
+static const uint64_t INTERMEDIATE_TENSOR_COUNT = 3;
+static const uint64_t NODE_COUNT = 4;
 
 NormMatmulOperation::NormMatmulOperation(const NormMatmulParam &param)
     : GraphOperation("NormMatmulOperation"), param_(param) {
@@ -60,14 +63,24 @@ NormMatmulOperation::NormMatmulOperation(const NormMatmulParam &param)
   opGraph_.nodes.resize(NODE_COUNT);
 
   size_t nodeId = 0;
+  GraphOperation::Node &floatCastNormWeightNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastNormBiasNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &inputNormNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &matMulNode = opGraph_.nodes.at(nodeId++);
+
+  floatCastNormWeightNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastNormWeightNode.inTensorIds = {IN_NORMWEIGHT};
+  floatCastNormWeightNode.outTensorIds = {INTERMIDATE_FLOATCASTNORMWEIGHTOUT};
+
+  floatCastNormBiasNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastNormBiasNode.inTensorIds = {IN_NORMBIAS};
+  floatCastNormBiasNode.outTensorIds = {INTERMIDATE_FLOATCASTNORMBIASOUT};
 
   inputNormNode.operation.reset(
       new AclTransformer::NormOperation({param_.layerNormEps,
                                          param_.layerNormBeginNormAxis,
                                          param_.layerNormBeginNormAxis}));
-  inputNormNode.inTensorIds = {IN_HIDDENSTATES, IN_NORMWEIGHT, IN_NORMBIAS};
+  inputNormNode.inTensorIds = {IN_HIDDENSTATES, INTERMIDATE_FLOATCASTNORMWEIGHTOUT, INTERMIDATE_FLOATCASTNORMBIASOUT};
   inputNormNode.outTensorIds = {INTERMIDATE_INPUTNORMOUT};
 
   matMulNode.operation.reset(

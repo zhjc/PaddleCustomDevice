@@ -29,6 +29,7 @@
 #include "acltransformer/statistic.h"
 #include "acltransformer/ops/add_operation.h"
 #include "acltransformer/ops/norm_operation.h"
+#include "acltransformer/ops/float_cast_operation.h"
 #include "acltransformer/ops/linear_operation.h"
 #include "self_attention_kv_cache_fusion_gpt3/self_attention_kv_cache_fusion_gpt3_operation.h"
 #include "acltransformer/ops/ffn_operation.h"
@@ -60,12 +61,19 @@ enum GPT3LayerDecoderTensorId
 
   OUT_GPT3LAYEROUT,
 
+  INTERMIDATE_FLOATCASTNORMWEIGHTOUT,
+  INTERMIDATE_FLOATCASTNORMBIASOUT,
+
   INTERMIDATE_INPUTNORMOUT,
   INTERMIDATE_MIXEDLINEAROUTQKV,
 
   INTERMIDATE_SELFOUT,
   INTERMIDATE_SELFLINEAROUT,
   INTERMIDATE_SELFRESIDUALADDOUT,
+  
+  INTERMIDATE_FLOATCASTSELFNORMWEIGHTOUT,
+  INTERMIDATE_FLOATCASTSELFNORMBIASOUT,
+
   INTERMIDATE_SELFNORMOUT,
   INTERMIDATE_FFNOUT,
   INTERMIDATE_FFNLINEAROUT,
@@ -73,8 +81,8 @@ enum GPT3LayerDecoderTensorId
 
 static const uint64_t IN_TENSOR_COUNT = 19;
 static const uint64_t OUT_TENSOR_COUNT = 1;
-static const uint64_t INTERMEDIATE_TENSOR_COUNT = 8;
-static const uint64_t NODE_COUNT = 9;
+static const uint64_t INTERMEDIATE_TENSOR_COUNT = 12;
+static const uint64_t NODE_COUNT = 13;
 
 GPT3LayerDecoderOperation::GPT3LayerDecoderOperation(const GPT3LayerParam &param)
     : GraphOperation("GPT3LayerDecoderOperation"), param_(param)
@@ -85,19 +93,31 @@ GPT3LayerDecoderOperation::GPT3LayerDecoderOperation(const GPT3LayerParam &param
   opGraph_.nodes.resize(NODE_COUNT);
 
   size_t nodeId = 0;
+  GraphOperation::Node &floatCastNormWeightNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastNormBiasNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &inputNormNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &mixdQkvLinearNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfAttentionKvCacheNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfOutLinearNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfResidualAddNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastSelfNormWeightNode = opGraph_.nodes.at(nodeId++);
+  GraphOperation::Node &floatCastSelfNormBiasNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &selfNormNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &ffnNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &ffnLinearNode = opGraph_.nodes.at(nodeId++);
   GraphOperation::Node &ffnResidualAddNode = opGraph_.nodes.at(nodeId++);
 
+  floatCastNormWeightNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastNormWeightNode.inTensorIds = {IN_NORMWEIGHT};
+  floatCastNormWeightNode.outTensorIds = {INTERMIDATE_FLOATCASTNORMWEIGHTOUT};
+
+  floatCastNormBiasNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastNormBiasNode.inTensorIds = {IN_NORMBIAS};
+  floatCastNormBiasNode.outTensorIds = {INTERMIDATE_FLOATCASTNORMBIASOUT};
+
   inputNormNode.operation.reset(new AclTransformer::NormOperation(
       {param_.layerNormEps, param_.layerNormBeginNormAxis, param_.layerNormBeginNormAxis}));
-  inputNormNode.inTensorIds = {IN_HIDDENSTATES, IN_NORMWEIGHT, IN_NORMBIAS};
+  inputNormNode.inTensorIds = {IN_HIDDENSTATES, INTERMIDATE_FLOATCASTNORMWEIGHTOUT, INTERMIDATE_FLOATCASTNORMBIASOUT};
   inputNormNode.outTensorIds = {INTERMIDATE_INPUTNORMOUT};
 
   mixdQkvLinearNode.operation.reset(new AclTransformer::LinearOperation({false, true})); /* 加速库默认会将w进行转置 */
@@ -124,8 +144,17 @@ GPT3LayerDecoderOperation::GPT3LayerDecoderOperation(const GPT3LayerParam &param
   selfResidualAddNode.inTensorIds = {IN_HIDDENSTATES, INTERMIDATE_SELFLINEAROUT};
   selfResidualAddNode.outTensorIds = {INTERMIDATE_SELFRESIDUALADDOUT};
 
-  selfNormNode.operation.reset(new AclTransformer::NormOperation({param_.layerNormEps}));
-  selfNormNode.inTensorIds = {INTERMIDATE_SELFRESIDUALADDOUT, IN_SELFOUTNORMWEIGHT, IN_SELFOUTNORMBIAS};
+  floatCastSelfNormWeightNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastSelfNormWeightNode.inTensorIds = {IN_SELFOUTNORMWEIGHT};
+  floatCastSelfNormWeightNode.outTensorIds = {INTERMIDATE_FLOATCASTSELFNORMWEIGHTOUT};
+
+  floatCastSelfNormBiasNode.operation.reset(new AclTransformer::FloatCastOperation());
+  floatCastSelfNormBiasNode.inTensorIds = {IN_SELFOUTNORMBIAS};
+  floatCastSelfNormBiasNode.outTensorIds = {INTERMIDATE_FLOATCASTSELFNORMBIASOUT};
+
+  selfNormNode.operation.reset(new AclTransformer::NormOperation(
+      {param_.layerNormEps, param_.layerNormBeginNormAxis, param_.layerNormBeginNormAxis}));
+  selfNormNode.inTensorIds = {INTERMIDATE_SELFRESIDUALADDOUT, INTERMIDATE_FLOATCASTSELFNORMWEIGHTOUT, INTERMIDATE_FLOATCASTSELFNORMBIASOUT};
   selfNormNode.outTensorIds = {INTERMIDATE_SELFNORMOUT};
 
   ffnNode.operation.reset(new AclTransformer::FfnOperation({false, true}));
@@ -168,8 +197,8 @@ AsdOps::Tensor g_gpt3_cachek;
 AsdOps::Tensor g_gpt3_cachev;
 AsdOps::Tensor g_gpt3_attenmask;
 
-std::vector<int32_t> g_seq_len_vector(1, 1); /* 增量的q_seq_len，为1，当前也只考虑batch为1 */
-AsdOps::SVector<int32_t> g_seq_len(1, 1);
+// std::vector<int32_t> g_seq_len_vector(1, 1); /* 增量的q_seq_len，为1，当前也只考虑batch为1 */
+// AsdOps::SVector<int32_t> g_seq_len(1, 1);
 std::vector<int32_t> g_token_offset_vector;
 AsdOps::SVector<int32_t> g_token_offset = {1};
 
@@ -283,6 +312,7 @@ void GPT3LayerGetTensorInputs(
   auto ffn_out_linear_bias_tensor = static_cast<const phi::DenseTensor *>(ffn_out_linear_bias.impl().get());
 
   std::vector<int32_t> layer_id_vec(1, layer_id);
+  std::vector<int32_t> g_seq_len_vector(hidden.shape().at(0), 1);
   custom_kernel::TensorFromVector(dev_ctx, g_seq_len_vector, dev_ctx, &seq_len_dense);
   custom_kernel::TensorFromVector(dev_ctx, g_token_offset_vector, dev_ctx, &token_offset_dense);
   custom_kernel::TensorFromVector(dev_ctx, layer_id_vec, dev_ctx, &layer_id_dense);
@@ -387,9 +417,11 @@ std::vector<paddle::Tensor> GPT3LayerOp(
     { /* token_offset为kvLen，第一个token，初始化为org_seq_len */
 
       int org_seq_len = past_key.shape().at(1);
-      int batch_tmp = 1;
+      int batch_tmp = past_key.shape().at(0);
       g_token_offset_vector.clear();
       g_token_offset_vector.resize(batch_tmp, org_seq_len);
+      AsdOps::SVector<int32_t> g_token_offset_t(batch_tmp, org_seq_len);
+	    g_token_offset = g_token_offset_t;
       // g_token_offset.clear();
       // g_token_offset.resize(batch_tmp);
       // g_token_offset.push_back(org_seq_len);
@@ -436,9 +468,11 @@ std::vector<paddle::Tensor> GPT3LayerOp(
       std::make_shared<phi::DenseTensor>();
   gpt3layerout_tensor->Resize(phi::make_ddim(hidden.shape()));
   dev_ctx->Alloc(gpt3layerout_tensor.get(), inputs.at(0)->dtype());
-
+  
+  AsdOps::SVector<int32_t> g_seq_len(past_key.shape().at(0), 1);
+  
   if (!g_gpt3DecoderOp) {
-    int batch_tmp = 1;
+    int batch_tmp = past_key.shape().at(0);
     int max_seq_len_tmp = 1024;
     int org_seq_len = past_key.shape().at(1);
     InitFlashAttentionTensor(layer_num, batch_tmp, org_seq_len, max_seq_len_tmp,
@@ -451,9 +485,6 @@ std::vector<paddle::Tensor> GPT3LayerOp(
   }
 
   static uint64_t executeCount_ = 0;
-  if ((executeCount_ + 1) % layer_num == 0) { // 1.....32,第32次同步
-    int ret = aclrtSynchronizeStream(stream);
-  }
 
   AclTransformer::VariantPack variantPack;
   g_variantPackParam_ = {g_seq_len, g_token_offset};
@@ -495,6 +526,11 @@ std::vector<paddle::Tensor> GPT3LayerOp(
   ASD_LOG(FATAL) << GPT3LayerOp << " executeCount:" << executeCount_++ << ", statistic:["
                  << AsdOps::GetSingleton<AclTransformer::Statistic>().ToString() << "]";
   AsdOps::GetSingleton<AclTransformer::Statistic>().Reset();
+
+  if ((executeCount_) % layer_num == 0) { // 1.....32,第32次同步
+    int ret = aclrtSynchronizeStream(stream);
+  }  
+  
   return {paddle::Tensor(gpt3layerout_tensor), past_key, past_value};
 }
 
