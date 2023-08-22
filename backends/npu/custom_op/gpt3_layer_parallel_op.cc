@@ -449,7 +449,7 @@ std::vector<paddle::Tensor> GPT3LayerParallelOp(
 
   int32_t layer_num = (int32_t)scale;
   int32_t head_dim = shape[3] / 3;
-  int32_t head_num = hidden.shape()[2] / head_dim;
+  int32_t head_num = self_out_linear_weight.shape()[0] / head_dim;
 
   static uint32_t layerId = 0;
 
