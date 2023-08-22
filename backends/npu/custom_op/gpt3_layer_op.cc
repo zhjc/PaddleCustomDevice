@@ -29,6 +29,7 @@
 #include "acltransformer/statistic.h"
 #include "acltransformer/ops/add_operation.h"
 #include "acltransformer/ops/norm_operation.h"
+#include "acltransformer/ops/float_cast_operation.h"
 #include "acltransformer/ops/linear_operation.h"
 #include "self_attention_kv_cache_fusion_gpt3/self_attention_kv_cache_fusion_gpt3_operation.h"
 #include "acltransformer/ops/ffn_operation.h"
@@ -151,7 +152,8 @@ GPT3LayerDecoderOperation::GPT3LayerDecoderOperation(const GPT3LayerParam &param
   floatCastSelfNormBiasNode.inTensorIds = {IN_SELFOUTNORMBIAS};
   floatCastSelfNormBiasNode.outTensorIds = {INTERMIDATE_FLOATCASTSELFNORMBIASOUT};
 
-  selfNormNode.operation.reset(new AclTransformer::NormOperation({param_.layerNormEps}));
+  selfNormNode.operation.reset(new AclTransformer::NormOperation(
+      {param_.layerNormEps, param_.layerNormBeginNormAxis, param_.layerNormBeginNormAxis}));
   selfNormNode.inTensorIds = {INTERMIDATE_SELFRESIDUALADDOUT, INTERMIDATE_FLOATCASTSELFNORMWEIGHTOUT, INTERMIDATE_FLOATCASTSELFNORMBIASOUT};
   selfNormNode.outTensorIds = {INTERMIDATE_SELFNORMOUT};
 

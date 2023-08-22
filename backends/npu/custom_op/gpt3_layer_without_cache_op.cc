@@ -134,7 +134,8 @@ GPT3LayerWithoutCacheDecoderOperation::GPT3LayerWithoutCacheDecoderOperation(con
   floatCastSelfNormBiasNode.inTensorIds = {IN_SELFOUTNORMBIAS_NOCACHE};
   floatCastSelfNormBiasNode.outTensorIds = {INTERMIDATE_FLOATCASTSELFNORMBIASOUT_NOCACHE};
 
-  selfNormNode.operation.reset(new AclTransformer::NormOperation({param_.layerNormEps}));
+  selfNormNode.operation.reset(new AclTransformer::NormOperation(
+      {param_.layerNormEps, param_.layerNormBeginNormAxis, param_.layerNormBeginNormAxis}));
   selfNormNode.inTensorIds = {INTERMIDATE_SELFRESIDUALADDOUT_NOCACHE, INTERMIDATE_FLOATCASTSELFNORMWEIGHTOUT_NOCACHE, INTERMIDATE_FLOATCASTSELFNORMBIASOUT_NOCACHE};
   selfNormNode.outTensorIds = {INTERMIDATE_SELFNORMOUT_NOCACHE};
           
