@@ -17,6 +17,8 @@
 
 #ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
 #include "acltransformer/graph_operation.h"
+#include <hccl/hccl.h>
+#include <hccl/hccl_types.h>
 
 struct GPT3LayerWorkspace {
     void *workspace_ = nullptr;
@@ -32,6 +34,7 @@ struct GPT3LayerParam {
     int layer_num = 0;
     AsdOps::SVector<int32_t> seqLen;
     AsdOps::SVector<int32_t> tokenOffset;
+    HcclComm comm;
 };
 
 class GPT3LayerDecoderOperation : public GraphOperation {
@@ -53,6 +56,36 @@ class GPT3LayerWithoutCacheDecoderOperation : public GraphOperation {
  public:
   explicit GPT3LayerWithoutCacheDecoderOperation(const GPT3LayerParam &param);
   ~GPT3LayerWithoutCacheDecoderOperation();
+  uint64_t GetInTensorCount() const override;
+  uint64_t GetOutTensorCount() const override;
+
+ protected:
+  AsdOps::Status InferShapeImpl(const AsdOps::SVector<AsdOps::Tensor> &inTensors,
+                                AsdOps::SVector<AsdOps::TensorDesc> &outTensorDescs) const override;
+
+ private:
+  GPT3LayerParam param_;
+};
+
+class GPT3LayerDecoderParallelOperation : public GraphOperation {
+ public:
+  explicit GPT3LayerDecoderParallelOperation(const GPT3LayerParam &param);
+  ~GPT3LayerDecoderParallelOperation();
+  uint64_t GetInTensorCount() const override;
+  uint64_t GetOutTensorCount() const override;
+
+ protected:
+  AsdOps::Status InferShapeImpl(const AsdOps::SVector<AsdOps::Tensor> &inTensors,
+                                AsdOps::SVector<AsdOps::TensorDesc> &outTensorDescs) const override;
+
+ private:
+  GPT3LayerParam param_;
+};
+
+class GPT3LayerWithoutCacheDecoderParallelOperation : public GraphOperation {
+ public:
+  explicit GPT3LayerWithoutCacheDecoderParallelOperation(const GPT3LayerParam &param);
+  ~GPT3LayerWithoutCacheDecoderParallelOperation();
   uint64_t GetInTensorCount() const override;
   uint64_t GetOutTensorCount() const override;
 
