@@ -392,6 +392,12 @@ variantPack.workspaceSize = g_gpt3WithoutCachePlan->GetWorkspaceSize();
                     phi::errors::External(
                     "GPT3LayerWithoutCacheOp Execute plan failed,"
                     "ret message: %s .", st.Message()));
+                    
+  static uint64_t executeCount_ = 0;
+  executeCount_++;
+  if ((executeCount_) % layer_num == 0) { // 1.....32,第32次同步
+    int ret = aclrtSynchronizeStream(stream);
+  }  
 
   return {paddle::Tensor(gpt3layerout_tensor),
           paddle::Tensor(presentkey_tensor),
