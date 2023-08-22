@@ -26,6 +26,7 @@ public:
 
 private:
     void BuildGraphWithMuls();
+    void BuildGraphWithMulsBS1();
     void SetKernelGrapModifyFunc();
 
 private:
