@@ -17,6 +17,8 @@ from .gpt3_layer_pass import gen_fuse_attention_layer, gen_fuse_attention_cached
 from .embedding_pass import generate_embedding
 from .identity_pass import generate_identity
 from .embedding_add_pass import generate_embedding_add
+from .dropout_pass import remove_dropout_after_ele_add
+from .norm_matmul_pass import generate_norm_matmul
 
 paddle.enable_static()
 

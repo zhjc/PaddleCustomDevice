@@ -559,9 +559,6 @@ std::vector<paddle::Tensor> GPT3LayerParallelOp(
   }
 
   static uint64_t executeCount_ = 0;
-  if ((executeCount_ + 1) % layer_num == 0) {  // 1.....32,第32次同步
-    int ret = aclrtSynchronizeStream(stream);
-  }
 
   AclTransformer::VariantPack variantPack;
   g_variantPackParam_ = {g_seq_len, g_token_offset};
@@ -606,6 +603,9 @@ std::vector<paddle::Tensor> GPT3LayerParallelOp(
                  << AsdOps::GetSingleton<AclTransformer::Statistic>().ToString()
                  << "]";
   AsdOps::GetSingleton<AclTransformer::Statistic>().Reset();
+  if ((executeCount_) % layer_num == 0) {  // 1.....32,第32次同步
+    int ret = aclrtSynchronizeStream(stream);
+  }
   return {paddle::Tensor(gpt3layerout_tensor), past_key, past_value};
 }
 
