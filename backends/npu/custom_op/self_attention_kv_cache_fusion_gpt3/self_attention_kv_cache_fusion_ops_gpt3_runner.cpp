@@ -190,7 +190,6 @@ void SelfAttentionKvCacheFusionOpsGPT3Runner::BuildGraphWithMuls()
   permuteflashOutNode.inTensorViewFuncs.resize(permuteflashOutNode.inTensors.size());
   permuteflashOutNode.inTensorViewFuncs[0] = [](const AsdOps::SVector<int64_t> &oldDims,
                                                 AsdOps::SVector<int64_t> &newDims) {
-    std::cout<<"oldDims: "<<oldDims.at(0)<<","<<oldDims.at(1)<<std::endl;
     newDims = {1, oldDims.at(0), oldDims.at(1)}; /* 1其实batch维 */
   };
 }

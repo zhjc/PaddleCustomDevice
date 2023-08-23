@@ -203,11 +203,10 @@ static AsdOps::Tensor g_gpt3_cachek;
 static AsdOps::Tensor g_gpt3_cachev;
 static AsdOps::Tensor g_gpt3_attenmask;
 
-static std::vector<int32_t> g_seq_len_vector(
-    1, 1); /* 增量的q_seq_len，为1，当前也只考虑batch为1 */
-static AsdOps::SVector<int32_t> g_seq_len(1, 1);
+// static std::vector<int32_t> g_seq_len_vector(1, 1); /* 增量的q_seq_len，为1，当前也只考虑batch为1 */
+// static AsdOps::SVector<int32_t> g_seq_len(1, 1);
 static std::vector<int32_t> g_token_offset_vector;
-static AsdOps::SVector<int32_t> g_token_offset = {1};
+static AsdOps::SVector<int32_t> g_token_offset;
 
 std::vector<std::vector<int64_t>> GPT3LayerParallelOpInferShape(
     const std::vector<int64_t> &hidden_shape,
@@ -332,6 +331,8 @@ void GPT3LayerParallelGetTensorInputs(
       static_cast<const phi::DenseTensor *>(ffn_out_linear_bias.impl().get());
 
   std::vector<int32_t> layer_id_vec(1, layer_id);
+  std::vector<int32_t> g_seq_len_vector(hidden.shape().at(0), 1);
+  
   custom_kernel::TensorFromVector(
       dev_ctx, g_seq_len_vector, dev_ctx, &seq_len_dense);
   custom_kernel::TensorFromVector(
@@ -446,7 +447,8 @@ std::vector<paddle::Tensor> GPT3LayerParallelOp(
     float scale) {
 
   AsdOps::Timer timer;
-
+  int32_t batch_size = past_key.shape().at(0);
+  int32_t org_seq_len = past_key.shape().at(1);
   int32_t layer_num = (int32_t)scale;
   int32_t head_dim = shape[3] / 3;
   int32_t head_num = self_out_linear_weight.shape()[0] / head_dim;
@@ -458,10 +460,12 @@ std::vector<paddle::Tensor> GPT3LayerParallelOp(
     if (g_gpt3DecoderMap.empty()) { /* token_offset为kvLen，第一个token，初始化为org_seq_len
                                      */
 
-      int org_seq_len = past_key.shape().at(1);
-      int batch_tmp = 1;
+      //int org_seq_len = past_key.shape().at(1);
+      //int batch_tmp = 1;
       g_token_offset_vector.clear();
-      g_token_offset_vector.resize(batch_tmp, org_seq_len);
+      g_token_offset_vector.resize(batch_size, org_seq_len);
+	  AsdOps::SVector<int32_t> g_token_offset_t(batch_size, org_seq_len);
+      g_token_offset = g_token_offset_t;
       // g_token_offset.clear();
       // g_token_offset.resize(batch_tmp);
       // g_token_offset.push_back(org_seq_len);
@@ -514,6 +518,8 @@ std::vector<paddle::Tensor> GPT3LayerParallelOp(
       gpt3decoderOp;
   std::shared_ptr<AclTransformer::Plan> gpt3plan;
 
+  AsdOps::SVector<int32_t> g_seq_len(batch_size, 1);
+  
   auto it = g_gpt3DecoderMap.find(comm);
   if (it == g_gpt3DecoderMap.end()) {
     std::cout << "GPT3LayerParallelOp comm: " << comm << std::endl;
@@ -521,11 +527,11 @@ std::vector<paddle::Tensor> GPT3LayerParallelOp(
         decoderOp;
     std::shared_ptr<AclTransformer::Plan> plan;
 
-    int batch_tmp = 1;
+    //int batch_tmp = 1;
     int max_seq_len_tmp = 1024;
-    int org_seq_len = past_key.shape().at(1);
+    //int org_seq_len = past_key.shape().at(1);
     InitFlashAttentionTensor(layer_num,
-                             batch_tmp,
+                             batch_size,
                              org_seq_len,
                              max_seq_len_tmp,
                              head_dim,
