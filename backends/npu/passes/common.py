@@ -15,6 +15,8 @@ from .linear_pass import generate_linear
 from .pad2d_pass import generate_pad2d
 from .gpt3_layer_pass import gen_fuse_attention_layer, gen_fuse_attention_cached_layer, gen_fuse_attention_parallel_layer, gen_fuse_attention_cached_parallel_layer
 from .embedding_pass import generate_embedding
+from .identity_pass import generate_identity
+from .embedding_add_pass import generate_embedding_add
 
 paddle.enable_static()
 
@@ -34,7 +36,8 @@ def addPasses(pass_builder):
     # pass_builder.append_pass("generate_matmul")
     pass_builder.append_pass("generate_linear")
     pass_builder.append_pass("generate_pad2d")
-    pass_builder.append_pass("generate_embedding")
+    #pass_builder.append_pass("generate_embedding")
+    #pass_builder.append_pass("generate_embedding_add")
     paddle.fluid.core.register_subgraph_pass("gen_fuse_multi_head_attention")
     # paddle.fluid.core.register_subgraph_pass("generate_split")
     paddle.fluid.core.register_subgraph_pass("generate_ffn")
