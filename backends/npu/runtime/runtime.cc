@@ -30,6 +30,7 @@
 #include <asdops/utils/rt/rt.h>
 #include "acltransformer/plan.h"
 #include "acltransformer/ops/all_reduce_operation.h"
+#include "acltransformer/ops/all_gather_operation.h"
 #endif
 
 FLAGS_DEFINE_string(npu_profiling_dir,
@@ -662,18 +663,91 @@ C_Status XcclReduce(void *send_buf,
   return C_SUCCESS;
 }
 
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+
+LayerWorkspace g_allgatherWorkSpace = {nullptr, 0};
+
+std::unique_ptr<AclTransformer::AllGatherOperation> g_allgatherOp;
+std::unique_ptr<AclTransformer::Plan> g_allgatherPlan;
+
+static void SetGatherWorkspace(uint64_t workspaceSize)
+{
+  if (workspaceSize <= g_allgatherWorkSpace.workspaceSize_) {
+    VLOG(4) << "WorkspaceRt::SetWorkspace workspaceSize:" << workspaceSize
+            << " <= workspaceSize_:" << g_allgatherWorkSpace.workspaceSize_ << ", not new device mem";
+    return;
+  }
+
+  if (g_allgatherWorkSpace.workspace_) {
+    AsdRtMemFreeDevice(g_allgatherWorkSpace.workspace_);
+    g_allgatherWorkSpace.workspace_ = nullptr;
+    g_allgatherWorkSpace.workspaceSize_ = 0;
+  }
+
+  int st = AsdRtMemMallocDevice((void **)&(g_allgatherWorkSpace.workspace_), workspaceSize, ASDRT_MEM_DEFAULT);
+  PADDLE_ENFORCE_EQ(st,
+                    ASDRT_SUCCESS,
+                    phi::errors::External(
+                        "AllReduce SetWorkspace AsdRtMemMallocDevice,"
+                        "fail, ret: %d .",
+                        st));
+
+  g_allgatherWorkSpace.workspaceSize_ = workspaceSize;
+}
+
+static void *GetGatherWorkspace() { return g_allgatherWorkSpace.workspace_;}
+
+#endif
+
 C_Status XcclAllGather(void *send_buf,
                        void *recv_buf,
                        size_t count,
                        C_DataType data_type,
                        C_CCLComm comm,
                        C_Stream stream) {
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+  
+  AclTransformer::Handle handle = {reinterpret_cast<aclrtStream>(stream)};
+  if (!g_allgatherOp) {
+    std::cout << "Run In XcclAllGather ACC" << std::endl;
+    AclTransformer::AllGatherParam param =
+      {0, 0, 0, "hccl", true, reinterpret_cast<HcclComm>(comm)};
+    g_allgatherOp.reset(new AclTransformer::AllGatherOperation(param));
+    g_allgatherPlan.reset(new AclTransformer::Plan);
+    g_allgatherOp->BuildPlan(g_allgatherPlan.get());
+  }
+
+  AclTransformer::VariantPack variantPack;
+  BuildVariantPack(send_buf, recv_buf, count, data_type, variantPack);
+
+  /* Set up */
+  AsdOps::Status st = g_allgatherPlan->Setup(handle, variantPack);
+  PADDLE_ENFORCE_EQ(st.Ok(),
+                    true,
+                    phi::errors::External(
+                    "XcclAllGather Setup plan failed,"
+                    "ret message: %s .", st.Message()));
+  variantPack.workspaceSize = g_allgatherPlan->GetWorkspaceSize();
+
+  if (variantPack.workspaceSize > 0) {
+      SetGatherWorkspace(variantPack.workspaceSize);
+      variantPack.workspace = GetGatherWorkspace();
+  }
+  /* Execute */
+  st = g_allgatherPlan->Execute(handle, variantPack);
+  PADDLE_ENFORCE_EQ(st.Ok(),
+                    true,
+                    phi::errors::External(
+                    "XcclAllGather Execute plan failed,"
+                    "ret message: %s .", st.Message()));
+#else
   HCCL_CHECK(HcclAllGather(send_buf,
                            recv_buf,
                            count,
                            PDDataTypeToHcclDataType(data_type),
                            reinterpret_cast<HcclComm>(comm),
                            reinterpret_cast<aclrtStream>(stream)));
+#endif
   return C_SUCCESS;
 }
 
