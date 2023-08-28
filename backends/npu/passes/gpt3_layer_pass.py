@@ -249,8 +249,11 @@ def gen_fuse_attention_cached_layer():
 
         # # residule
         res_add_out_2 = ir.PassDesc.OP.elementwise_add(X=res_add_out, Y=drop_3_out)
-         
-        return res_add_out_2, concated_k, concated_v
+
+        assign_k = ir.PassDesc.OP.assign(X=concated_k)
+        assign_v = ir.PassDesc.OP.assign(X=concated_v)
+        
+        return res_add_out_2, assign_k, assign_v
 
     def gpt3_layer_cache_adaptor(embeddings, norm_weight, norm_bias, mix_linear_weight, mix_linear_bias,
     self_out_linear_weight, self_out_linear_bias, self_out_norm_weight, self_out_norm_bias,
@@ -490,7 +493,10 @@ def gen_fuse_attention_cached_parallel_layer():
 
         res_add_out_2 = ir.PassDesc.OP.elementwise_add(X=res_add_out, Y=drop_3_out)
 
-        return res_add_out_2, concated_k, concated_v
+        assign_k = ir.PassDesc.OP.assign(X=concated_k)
+        assign_v = ir.PassDesc.OP.assign(X=concated_v)
+        
+        return res_add_out_2, assign_k, assign_v
 
     def gpt3_layer_cache_adaptor(embeddings, norm_weight, norm_bias, mix_linear_weight, mix_linear_bias,
     self_out_linear_weight, self_out_linear_bias, self_out_norm_weight, self_out_norm_bias,
