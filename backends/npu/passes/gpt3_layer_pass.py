@@ -422,9 +422,7 @@ def gen_fuse_attention_parallel_layer():
 
     return pattern, replace
 
-@ir.RegisterPass
-def gen_fuse_attention_cached_parallel_layer():
-    def pattern(embeddings, norm_weight, norm_bias, mix_linear_weight, mix_linear_bias,
+def gpt3_kvcache_pattern(embeddings, norm_weight, norm_bias, mix_linear_weight, mix_linear_bias,
     self_out_linear_weight, self_out_linear_bias, self_out_norm_weight, self_out_norm_bias,
     ffn_linear_weight, ffn_linear_bias, ffn_out_linear_weight, ffn_out_linear_bias, attn_mask, past_key, past_value):
         # layernorm
@@ -497,7 +495,9 @@ def gen_fuse_attention_cached_parallel_layer():
         assign_v = ir.PassDesc.OP.assign(X=concated_v)
         
         return res_add_out_2, assign_k, assign_v
-
+    
+@ir.RegisterPass
+def gen_fuse_attention_cached_parallel_layer():
     def gpt3_layer_cache_adaptor(embeddings, norm_weight, norm_bias, mix_linear_weight, mix_linear_bias,
     self_out_linear_weight, self_out_linear_bias, self_out_norm_weight, self_out_norm_bias,
     ffn_linear_weight, ffn_linear_bias, ffn_out_linear_weight, ffn_out_linear_bias, attn_mask, past_key, past_value):
@@ -548,4 +548,58 @@ def gen_fuse_attention_cached_parallel_layer():
 
         return out[0], out[1], out[2]
 
-    return pattern, replace
+    return gpt3_kvcache_pattern, replace
+
+@ir.RegisterPass
+def gen_fuse_attention_cached_parallel_async_layer():
+    def gpt3_layer_cache_adaptor(embeddings, norm_weight, norm_bias, mix_linear_weight, mix_linear_bias,
+    self_out_linear_weight, self_out_linear_bias, self_out_norm_weight, self_out_norm_bias,
+    ffn_linear_weight, ffn_linear_bias, ffn_out_linear_weight, ffn_out_linear_bias, attn_mask, past_key, past_value):
+        gpt3_layer_parallel_op = ir.PassDesc.OP.gpt3_layer_parallel_async
+        gpt3_layer_parallel_op._outputs = {}
+        gpt3_layer_parallel_op(
+            Hidden=embeddings,
+            NormWeight=norm_weight,
+            NormBias=norm_bias,
+            MixLinearWeight=mix_linear_weight,
+            MixLinearBias=mix_linear_bias,
+            SelfOutLinearWeight=self_out_linear_weight,
+            SelfOutLinearBias=self_out_linear_bias,
+            SelfOutNormWeight=self_out_norm_weight,
+            SelfOutNormBias=self_out_norm_bias,
+            FfnLinearWeight=ffn_linear_weight,
+            FfnLinearBias=ffn_linear_bias,
+            FfnOutLinearWeight=ffn_out_linear_weight,
+            FfnOutLinearBias=ffn_out_linear_bias,
+            AttentionMask=attn_mask,
+            PastKey=past_key,
+            PastValue=past_value)
+
+        outs_name = [paddle.fluid.unique_name.generate('gpt3_layer_parallel_async') for i in range(3)] # 3 outputs
+        print(outs_name)
+        gpt3_layer_parallel_op._desc.set_output("Out", [outs_name[0]])
+        gpt3_layer_parallel_op._desc.set_output("PresentKey", [outs_name[1]])
+        gpt3_layer_parallel_op._desc.set_output("PresentValue", [outs_name[2]])
+
+        gpt3_layer_parallel_op.Attr("begin_norm_axis").MappedPattern(op="layer_norm", name="begin_norm_axis", index=0)
+        gpt3_layer_parallel_op.Attr("epsilon").MappedPattern(op="layer_norm", name="epsilon", index=0)
+        gpt3_layer_parallel_op.Attr("shape").MappedPattern(op="reshape2", name="shape", index=0)
+        gpt3_layer_parallel_op.Attr("scale").MappedPattern(op="scale", name="scale", index=1)
+        
+        block = paddle.static.default_main_program().current_block()
+        results = []
+        for out in outs_name:
+            results.append(block.create_var(name=out))
+        return results[0], results[1], results[2]
+
+    def replace(embeddings, norm_weight, norm_bias, mix_linear_weight, mix_linear_bias,
+      self_out_linear_weight, self_out_linear_bias, self_out_norm_weight, self_out_norm_bias,
+      ffn_linear_weight, ffn_linear_bias, ffn_out_linear_weight, ffn_out_linear_bias, attn_mask, past_key, past_value):
+
+        out = gpt3_layer_cache_adaptor(embeddings, norm_weight, norm_bias, mix_linear_weight, mix_linear_bias,
+            self_out_linear_weight, self_out_linear_bias, self_out_norm_weight, self_out_norm_bias,
+            ffn_linear_weight, ffn_linear_bias, ffn_out_linear_weight, ffn_out_linear_bias, attn_mask, past_key, past_value)
+
+        return out[0], out[1], out[2]
+
+    return gpt3_kvcache_pattern, replace
