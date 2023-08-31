@@ -15,6 +15,8 @@ option(WITH_MKLDNN "compile with MKLDNN support" ON)
 option(WITH_KERNELS "compile with custom kernels" ON)
 option(WITH_TESTING "compile with unit testing" OFF)
 option(WITH_ARM "compile with arm support" OFF)
+option(WITH_ASCEND_TRANSFORMER_ACC "compile with ascend transformer acceleration" OFF)
+option(ON_INFER "compile with inference c++ lib" OFF)
 option(ON_INFER "compile with inference c++ lib" OFF)
 
 message(STATUS "CXX compiler: ${CMAKE_CXX_COMPILER}, version: "
@@ -48,6 +50,20 @@ if(WITH_KERNELS)
     RELATIVE ${CMAKE_SOURCE_DIR}
     custom_op/*.cc)
   list(APPEND CUSTOM_NPU_SRCS ${CUSTOM_CUSTOM_OP_SRCS})
+
+  if(WITH_ASCEND_TRANSFORMER_ACC)
+    file(
+      GLOB_RECURSE CUSTOM_ACC_RUNNER_SRCS
+      RELATIVE ${CMAKE_SOURCE_DIR}
+      custom_op/self_attention/*.cpp
+      custom_op/self_attention_kv_cache_fusion_gpt3/*.cpp)
+    list(APPEND CUSTOM_NPU_SRCS ${CUSTOM_ACC_RUNNER_SRCS})
+  endif()
+endif()
+
+# ASCEND TRANSFORMER ACCELERATION
+if(WITH_ASCEND_TRANSFORMER_ACC)
+  add_definitions(-DPADDLE_WITH_ASCEND_TRANSFORMER_ACC)
 endif()
 
 # C++ infer lib need to compatiable with CXX11
@@ -62,6 +78,11 @@ add_dependencies(${CUSTOM_NPU_NAME} ascend_cl)
 target_link_libraries(${CUSTOM_NPU_NAME} PRIVATE ${ascendcl_lib}
                                                  ${ascend_hccl_lib} glog gflags)
 target_link_libraries(${CUSTOM_NPU_NAME} PRIVATE ${acl_op_compiler_lib})
+
+if(WITH_ASCEND_TRANSFORMER_ACC)
+  target_link_libraries(${CUSTOM_NPU_NAME} PRIVATE $ENV{ACLTRANSFORMER_HOME_PATH}/lib/libacltransformer.so)
+  include_directories($ENV{ACLTRANSFORMER_HOME_PATH}/include)
+endif()
 
 # link paddle shared library
 include(third_party)
@@ -115,6 +136,13 @@ add_custom_command(
 
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/python/.timestamp
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+    ${CMAKE_CURRENT_BINARY_DIR}/python/paddle_custom_device/npu/passes
+  COMMAND ${CMAKE_COMMAND} -E remove -f
+    ${CMAKE_CURRENT_BINARY_DIR}/python/paddle_custom_device/npu/passes    
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_SOURCE_DIR}/passes/*
+    ${CMAKE_CURRENT_BINARY_DIR}/python/paddle_custom_device/npu/passes
   COMMAND python3 ${CMAKE_CURRENT_BINARY_DIR}/setup.py bdist_wheel
   DEPENDS ${CUSTOM_NPU_NAME}
   COMMENT "Packing whl packages------>>>")

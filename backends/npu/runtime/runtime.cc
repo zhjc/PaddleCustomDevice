@@ -25,6 +25,14 @@
 #include "glog/logging.h"
 #include "runtime/flags.h"
 
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+#include "kernels/funcs/format_utils.h"
+#include <asdops/utils/rt/rt.h>
+#include "acltransformer/plan.h"
+#include "acltransformer/ops/all_reduce_operation.h"
+#include "acltransformer/ops/all_gather_operation.h"
+#endif
+
 FLAGS_DEFINE_string(npu_profiling_dir,
                     "ascend_profiling",
                     "ACL profiling output dir");
@@ -76,9 +84,9 @@ void SecondaryStream::RecordBefore(aclrtStream aicore_stream) {
   }
   {
     aclrtEvent event;
-    ACL_CHECK(aclrtCreateEvent(&event));
-    ACL_CHECK(aclrtRecordEvent(event, aicpu_stream));
-    ACL_CHECK(aclrtStreamWaitEvent(aicore_stream, event));
+    // ACL_CHECK(aclrtCreateEvent(&event));
+    // ACL_CHECK(aclrtRecordEvent(event, aicpu_stream));
+    // ACL_CHECK(aclrtStreamWaitEvent(aicore_stream, event));
     events.push_back(event);
   }
 }
@@ -102,9 +110,9 @@ void SecondaryStream::RecordAfter(aclrtStream aicore_stream) {
   }
   {
     aclrtEvent event;
-    ACL_CHECK(aclrtCreateEvent(&event));
-    ACL_CHECK(aclrtRecordEvent(event, aicore_stream));
-    ACL_CHECK(aclrtStreamWaitEvent(aicpu_stream, event));
+    // ACL_CHECK(aclrtCreateEvent(&event));
+    // ACL_CHECK(aclrtRecordEvent(event, aicore_stream));
+    // ACL_CHECK(aclrtStreamWaitEvent(aicpu_stream, event));
     events.push_back(event);
   }
 }
@@ -128,33 +136,33 @@ class AlignnedAllocator {
   }
 
   void ClearEvent() {
-    std::lock_guard<std::mutex> lock(mtx_);
-    for (auto it = recorded_events_.begin(); it != recorded_events_.end();) {
-      aclrtEvent event = it->second.second;
-      if (!event) continue;
-      ACL_CHECK(aclrtSynchronizeEvent(event));
-      void *ptr = it->second.first;
-      free(ptr);
-      ACL_CHECK(aclrtDestroyEvent(event));
-      it = recorded_events_.erase(it);
-    }
+    // std::lock_guard<std::mutex> lock(mtx_);
+    // for (auto it = recorded_events_.begin(); it != recorded_events_.end();) {
+    //   aclrtEvent event = it->second.second;
+    //   if (!event) continue;
+    //   ACL_CHECK(aclrtSynchronizeEvent(event));
+    //   void *ptr = it->second.first;
+    //   free(ptr);
+    //   ACL_CHECK(aclrtDestroyEvent(event));
+    //   it = recorded_events_.erase(it);
+    // }
   }
 
   void ProcessEvents() {
-    for (auto it = recorded_events_.begin(); it != recorded_events_.end();) {
-      aclrtEvent event = it->second.second;
-      if (!event) continue;
-      aclrtEventRecordedStatus status = ACL_EVENT_RECORDED_STATUS_COMPLETE;
-      ACL_CHECK(aclrtQueryEventStatus(event, &status));
-      if (status == ACL_EVENT_RECORDED_STATUS_COMPLETE) {
-        void *ptr = it->second.first;
-        free(ptr);
-        it = recorded_events_.erase(it);
-        ACL_CHECK(aclrtDestroyEvent(event));
-      } else {
-        ++it;
-      }
-    }
+    // for (auto it = recorded_events_.begin(); it != recorded_events_.end();) {
+    //   aclrtEvent event = it->second.second;
+    //   if (!event) continue;
+    //   aclrtEventRecordedStatus status = ACL_EVENT_RECORDED_STATUS_COMPLETE;
+    //   ACL_CHECK(aclrtQueryEventStatus(event, &status));
+    //   if (status == ACL_EVENT_RECORDED_STATUS_COMPLETE) {
+    //     void *ptr = it->second.first;
+    //     free(ptr);
+    //     it = recorded_events_.erase(it);
+    //     ACL_CHECK(aclrtDestroyEvent(event));
+    //   } else {
+    //     ++it;
+    //   }
+    // }
   }
 
  private:
@@ -299,11 +307,11 @@ C_Status AsyncMemCpyH2D(const C_Device device,
   auto allocator = global_allocator_list->GetAllocator(get_current_device_id());
   void *tmp = allocator->Alloc(size, 64);
   aclrtEvent event;
-  ACL_CHECK(aclrtCreateEvent(&event));
+  // ACL_CHECK(aclrtCreateEvent(&event));
   memcpy(tmp, src, size);
   ACL_CHECK(aclrtMemcpyAsync(
       dst, size, tmp, size, ACL_MEMCPY_HOST_TO_DEVICE, (aclrtStream)(stream)));
-  ACL_CHECK(aclrtRecordEvent(event, (aclrtStream)(stream)));
+  // ACL_CHECK(aclrtRecordEvent(event, (aclrtStream)(stream)));
   allocator->Record(tmp, event);
   return C_SUCCESS;
 }
@@ -372,7 +380,7 @@ C_Status HostDeallocate(const C_Device device, void *ptr, size_t size) {
 }
 
 C_Status CreateStream(const C_Device device, C_Stream *stream) {
-  ACL_CHECK(aclrtCreateStream(reinterpret_cast<aclrtStream *>(stream)));
+  ACL_CHECK(aclrtCreateStreamWithConfig(reinterpret_cast<aclrtStream *>(stream), 0, (ACL_STREAM_FAST_LAUNCH | ACL_STREAM_FAST_SYNC)));
   SecondaryStream::Instance().Create(*reinterpret_cast<aclrtStream *>(stream));
   return C_SUCCESS;
 }
@@ -507,6 +515,7 @@ C_Status XcclCommInitRank(size_t nranks,
                            reinterpret_cast<HcclRootInfo *>(unique_id->data),
                            rank,
                            reinterpret_cast<HcclComm *>(comm)));
+  std::cout << "ranksize: " << nranks << " HcclComm: " << *reinterpret_cast<HcclComm *>(comm) << " rank: " << rank << std::endl;
   return C_SUCCESS;
 }
 
@@ -515,6 +524,59 @@ C_Status XcclDestroyComm(C_CCLComm comm) {
   return C_SUCCESS;
 }
 
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+struct LayerWorkspace {
+  void *workspace_ = nullptr;
+  uint64_t workspaceSize_ = 0;
+};
+
+LayerWorkspace g_allreduceWorkSpace = {nullptr, 0};
+
+std::unique_ptr<AclTransformer::AllReduceOperation> g_allreduceOp;
+std::unique_ptr<AclTransformer::Plan> g_allreducePlan;
+
+static void SetWorkspace(uint64_t workspaceSize)
+{
+  if (workspaceSize <= g_allreduceWorkSpace.workspaceSize_) {
+    VLOG(4) << "WorkspaceRt::SetWorkspace workspaceSize:" << workspaceSize
+            << " <= workspaceSize_:" << g_allreduceWorkSpace.workspaceSize_ << ", not new device mem";
+    return;
+  }
+
+  if (g_allreduceWorkSpace.workspace_) {
+    AsdRtMemFreeDevice(g_allreduceWorkSpace.workspace_);
+    g_allreduceWorkSpace.workspace_ = nullptr;
+    g_allreduceWorkSpace.workspaceSize_ = 0;
+  }
+
+  int st = AsdRtMemMallocDevice((void **)&(g_allreduceWorkSpace.workspace_), workspaceSize, ASDRT_MEM_DEFAULT);
+  PADDLE_ENFORCE_EQ(st,
+                    ASDRT_SUCCESS,
+                    phi::errors::External(
+                        "AllReduce SetWorkspace AsdRtMemMallocDevice,"
+                        "fail, ret: %d .",
+                        st));
+
+  g_allreduceWorkSpace.workspaceSize_ = workspaceSize;
+}
+
+static void *GetWorkspace() { return g_allreduceWorkSpace.workspace_;}
+
+
+static void BuildVariantPack(void *send_buf,
+                             void *recv_buf,
+                             size_t count,
+                             C_DataType data_type,
+                             AclTransformer::VariantPack &variantPack)
+{
+  variantPack.inTensors.resize(1);
+  variantPack.inTensors.at(0) = ConvertCDataToAsdTensor(send_buf, count, data_type);
+
+  variantPack.outTensors.resize(1);
+  variantPack.outTensors.at(0) = ConvertCDataToAsdTensor(recv_buf, count, data_type);
+}
+#endif
+
 C_Status XcclAllReduce(void *send_buf,
                        void *recv_buf,
                        size_t count,
@@ -522,6 +584,40 @@ C_Status XcclAllReduce(void *send_buf,
                        C_CCLReduceOp op,
                        C_CCLComm comm,
                        C_Stream stream) {
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+  AclTransformer::Handle handle = {reinterpret_cast<aclrtStream>(stream)};
+  if (!g_allreduceOp) {
+    AclTransformer::AllReduceParam param =
+      {0, 0, 0, "sum", "hccl", true, reinterpret_cast<HcclComm>(comm)};
+    g_allreduceOp.reset(new AclTransformer::AllReduceOperation(param));
+    g_allreducePlan.reset(new AclTransformer::Plan);
+    g_allreduceOp->BuildPlan(g_allreducePlan.get());
+  }
+
+  AclTransformer::VariantPack variantPack;
+  BuildVariantPack(send_buf, recv_buf, count, data_type, variantPack);
+
+  /* Set up */
+  AsdOps::Status st = g_allreducePlan->Setup(handle, variantPack);
+  PADDLE_ENFORCE_EQ(st.Ok(),
+                    true,
+                    phi::errors::External(
+                    "XcclAllReduce Setup plan failed,"
+                    "ret message: %s .", st.Message()));
+  variantPack.workspaceSize = g_allreducePlan->GetWorkspaceSize();
+
+  if (variantPack.workspaceSize > 0) {
+      SetWorkspace(variantPack.workspaceSize);
+      variantPack.workspace = GetWorkspace();
+  }
+  /* Execute */
+  st = g_allreducePlan->Execute(handle, variantPack);
+  PADDLE_ENFORCE_EQ(st.Ok(),
+                    true,
+                    phi::errors::External(
+                    "XcclAllReduce Execute plan failed,"
+                    "ret message: %s .", st.Message()));
+#else
   HCCL_CHECK(HcclAllReduce(send_buf,
                            recv_buf,
                            count,
@@ -529,6 +625,7 @@ C_Status XcclAllReduce(void *send_buf,
                            PDReduceOpToHcclReduceOp(op),
                            reinterpret_cast<HcclComm>(comm),
                            reinterpret_cast<aclrtStream>(stream)));
+#endif
   return C_SUCCESS;
 }
 
@@ -566,18 +663,91 @@ C_Status XcclReduce(void *send_buf,
   return C_SUCCESS;
 }
 
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+
+LayerWorkspace g_allgatherWorkSpace = {nullptr, 0};
+
+std::unique_ptr<AclTransformer::AllGatherOperation> g_allgatherOp;
+std::unique_ptr<AclTransformer::Plan> g_allgatherPlan;
+
+static void SetGatherWorkspace(uint64_t workspaceSize)
+{
+  if (workspaceSize <= g_allgatherWorkSpace.workspaceSize_) {
+    VLOG(4) << "WorkspaceRt::SetWorkspace workspaceSize:" << workspaceSize
+            << " <= workspaceSize_:" << g_allgatherWorkSpace.workspaceSize_ << ", not new device mem";
+    return;
+  }
+
+  if (g_allgatherWorkSpace.workspace_) {
+    AsdRtMemFreeDevice(g_allgatherWorkSpace.workspace_);
+    g_allgatherWorkSpace.workspace_ = nullptr;
+    g_allgatherWorkSpace.workspaceSize_ = 0;
+  }
+
+  int st = AsdRtMemMallocDevice((void **)&(g_allgatherWorkSpace.workspace_), workspaceSize, ASDRT_MEM_DEFAULT);
+  PADDLE_ENFORCE_EQ(st,
+                    ASDRT_SUCCESS,
+                    phi::errors::External(
+                        "AllReduce SetWorkspace AsdRtMemMallocDevice,"
+                        "fail, ret: %d .",
+                        st));
+
+  g_allgatherWorkSpace.workspaceSize_ = workspaceSize;
+}
+
+static void *GetGatherWorkspace() { return g_allgatherWorkSpace.workspace_;}
+
+#endif
+
 C_Status XcclAllGather(void *send_buf,
                        void *recv_buf,
                        size_t count,
                        C_DataType data_type,
                        C_CCLComm comm,
                        C_Stream stream) {
+#ifdef PADDLE_WITH_ASCEND_TRANSFORMER_ACC
+  
+  AclTransformer::Handle handle = {reinterpret_cast<aclrtStream>(stream)};
+  if (!g_allgatherOp) {
+    std::cout << "Run In XcclAllGather ACC" << std::endl;
+    AclTransformer::AllGatherParam param =
+      {0, 0, 0, "hccl", true, reinterpret_cast<HcclComm>(comm)};
+    g_allgatherOp.reset(new AclTransformer::AllGatherOperation(param));
+    g_allgatherPlan.reset(new AclTransformer::Plan);
+    g_allgatherOp->BuildPlan(g_allgatherPlan.get());
+  }
+
+  AclTransformer::VariantPack variantPack;
+  BuildVariantPack(send_buf, recv_buf, count, data_type, variantPack);
+
+  /* Set up */
+  AsdOps::Status st = g_allgatherPlan->Setup(handle, variantPack);
+  PADDLE_ENFORCE_EQ(st.Ok(),
+                    true,
+                    phi::errors::External(
+                    "XcclAllGather Setup plan failed,"
+                    "ret message: %s .", st.Message()));
+  variantPack.workspaceSize = g_allgatherPlan->GetWorkspaceSize();
+
+  if (variantPack.workspaceSize > 0) {
+      SetGatherWorkspace(variantPack.workspaceSize);
+      variantPack.workspace = GetGatherWorkspace();
+  }
+  /* Execute */
+  st = g_allgatherPlan->Execute(handle, variantPack);
+  PADDLE_ENFORCE_EQ(st.Ok(),
+                    true,
+                    phi::errors::External(
+                    "XcclAllGather Execute plan failed,"
+                    "ret message: %s .", st.Message()));
+#else
   HCCL_CHECK(HcclAllGather(send_buf,
                            recv_buf,
                            count,
                            PDDataTypeToHcclDataType(data_type),
                            reinterpret_cast<HcclComm>(comm),
                            reinterpret_cast<aclrtStream>(stream)));
+#endif
   return C_SUCCESS;
 }
 
